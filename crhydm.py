@@ -21,17 +21,11 @@ class Options:
         self.options+=o
 
 
-class Instrument:
-
-    def __init__(self,n,par,table,instr, mod_params):
+class InstrumentBase:
+    def __init__(self,n,par):
         self.name=n
         self.params=['p1','p2','p3'] + par
-        self.zakOuts=[] # every element tuple with: (out,type,zak number)
-        self.inputs=[]
-        self.table=table #symbol table
-        self.instr=instr # instructions
-        self.mod_params=mod_params
-        self.text=''
+        self.used=False
 
     def getPositionOfParameter(self,p):
         try:
@@ -39,16 +33,37 @@ class Instrument:
         except ValueError:
             return -1
 
+    def asString(self):
+        if self.used:
+            text='instr ' + self.name + '\n' + self.text + '\n'
+            return text
+        else:
+            return ''
 
-    def asString(self,zak):
-        text='instr ' + self.name + '\n' + self.text + '\n'
-        return text
+class Instrument(InstrumentBase):
+
+    def __init__(self,n,par,table,instr, mod_params):
+        InstrumentBase.__init__(self,n,par)
+        self.zakOuts=[] # every element tuple with: (out,type,zak number)
+        self.inputs=[]
+        self.table=table #symbol table
+        self.instr=instr # instructions
+        self.mod_params=mod_params
+        self.text=''
+
 
     def insertZakOuts(self, zakOuts):
         self.zakOuts=zakOuts
 
     def insertInputs(self, inputs):
         self.inputs=inputs
+
+
+class Instr(InstrumentBase):
+    def __init__(self,name,text):
+        InstrumentBase.__init__(self,name,[])
+        self.text=text
+
 
 class Orchestra:
 
@@ -93,7 +108,8 @@ class Orchestra:
             res+='zakinit ' + str(self.zakNumbera) +',' + str(self.zakNumberk) + '\n'
         for instrument in self.instruments:
             if  not instr or instrument.name in set(instr):
-                res+=instrument.asString(self.getZak())
+                ##res+=instrument.asString(self.getZak())
+                res+=instrument.asString()
         res+= '</CsInstruments>\n'
         return res
 
@@ -884,7 +900,18 @@ class Interpreter:
             #    return self.readIdentifier(ch),'/identifier'
                 return '\n','\n'
         elif ch=='#':
-                return '#','section'
+                tok,t=self.nextToken()
+                if tok=='include':
+                    name,t=self.nextToken()
+                    try:
+                        self.includeFile=open(name)
+                        self.include=name
+                        return self.nextToken()
+                    except IOError:
+                        self.printError('error opening file '+name)
+                else:
+                    self.unread(tok)
+                    return '#','section'
         elif ch.isdigit() or ch=='.':
             return self.readNumber(ch),'number'
         else:
@@ -948,8 +975,14 @@ class Interpreter:
                             #    s=instrName + '_' +s
                             #if style=='old' and (s=='=' or s=='(' or s==')'):
                             #    s=' '
+                            if t=='l':
+                                t=''
+                                s=v
                             if t=='A':
                                 t='k'
+
+                            if t=='boolean':
+                                t='i'
                             text += t + s 
         return text        
 
@@ -1086,6 +1119,31 @@ class Interpreter:
         except ValueError:
             return -1
 
+    def renameInstrument(self):
+        name,t=self.nextToken()
+        newName,t=self.nextToken()
+        parameters=[]
+        p,t=self.nextToken()
+        while p!='\n':
+            parameters.append(p)
+            p,t=self.nextToken()
+        for instrument in self.song.orchestra.instruments:
+            if instrument.name==newName:
+                self.printError('Instrument '+ newName + ' already defined.')
+
+        for instrument in self.song.orchestra.instruments:
+            if instrument.name==name:
+                instrument.name=newName
+                instrument.params=['p1','p2','p3'] + parameters
+                #print('insertando',newName,[newName,instrument])
+                self.insertSymbol(newName,'instrument',[newName,instrument])
+                self.symbolTable[newName]={}
+                self.symbolTable[newName]['dictionary']={}
+                #self.insertSymbol(name,'deleted',None)
+                #self.symbolTable[name]=None
+                self.cleanSymbolTable(name)
+                return
+        return
 
     def readOrchestraLine(self):
         token,t=self.nextToken()
@@ -1103,6 +1161,15 @@ class Interpreter:
             i=Instrument(name,parameters,table,instr,par)
             self.insertSymbol(name,'instrument',[name,i])
             self.song.insertInstrument(i)
+            return ''
+        if token=='instr':
+            name,text=self.readInstrText() 
+            i=Instr(name,text)
+            self.insertSymbol(name,'instrument',[name,i])
+            self.song.insertInstrument(i)
+            return ''
+        if token=='rename':
+            self.renameInstrument()
             return ''
         if token=='\n':
             return ''
@@ -1317,8 +1384,21 @@ class Interpreter:
             n,t=self.nextToken()
             t,v=self.getSymbol(n) 
             i=v[1]
-            par = i.params[3:]
-            return name, par, i.mod_params, i.table, i.instr
+            par = copy.deepcopy(i.params[3:])
+            mod_params=copy.deepcopy(i.mod_params)
+            table=copy.deepcopy(i.table)
+            tok,t=self.nextToken()
+            if tok=='(':
+                while tok!=')':
+                    n,t=self.nextToken()        
+                    t,v=self.getSymbol(n) 
+                    self.expectToken(['='])
+                    nn,t=self.nextToken()        
+                    par.remove(n)
+                    mod_params.remove(n)
+                    table[n]=['l',nn] #literal
+                    tok,t=self.expectToken([')',','])
+            return name, par, mod_params, table, i.instr
         else:
             while p!='\n':
                 if p=='+':
@@ -1354,6 +1434,26 @@ class Interpreter:
         self.cleanSymbolTable('local')
         self.env='general'
         return name, parameters, par, table, instr
+
+    def isEndin(self,line):
+        n=line.find('endin')  ###
+        return n!=-1
+
+    def readInstrText(self):
+        name,t1=self.nextToken()
+        if self.isInstrument(name):
+            self.printError('instrument already defined '+ name)
+        text=''
+        self.readLine()
+        line=self.line
+        while not self.isEndin(line):
+            text +=line
+            self.readLine()
+            line=self.line
+        text +=line
+        self.readLine()
+        return name,text    
+
 
     def coerce(self,t1,t2):
         if t1[0]=='g':
@@ -1426,8 +1526,10 @@ class Interpreter:
         elif t1=='listVar':
              if t2=='listVar': #if the lists are of the same parameter, they are concatenated
                 if v1[0]==v2[0]:
+                    aux=v1[1]
+                    aux.append(',')
                     #v2.pop(0)
-                    return v1 + v2[1:], 'listVar'
+                    return [v1[0], aux +  v2[1:][0]] , 'listVar'
                 else:
                     return v1 + [','] + v2,'listVar'
         self.printError('types '+t1+' and '+t2+" can't be added")
@@ -1596,7 +1698,7 @@ class Interpreter:
     def readProduct(self):  # value { * value}*
         value,t=self.readValue()
         ch,cht=self.nextToken()
-        while ch in ['*','/','%','^','&&','==','!=','>=','<=','<','>']:
+        while ch in ['*','/','%','^','&&','==','!=','>=','<=','<','>','?',':']:
             v,ty=self.readValue()
             if ch=='*': 
                 value,t=self.multiply(value,t,v,ty)
@@ -1606,7 +1708,7 @@ class Interpreter:
                 value,t=self.module(value,t,v,ty)
             elif ch=='^':
                 value,t=self.exponential(value,t,v,ty)
-            elif ch in ['&&','==','!=','>=','<=','<','>']:
+            elif ch in ['&&','==','!=','>=','<=','<','>','?',':']:
                 value,t=self.logical(value,t,v,ty,ch)
             ch,cht=self.nextToken()
         self.unread(ch)  
@@ -1741,13 +1843,29 @@ class Interpreter:
         l=[]
         value,t=self.nextToken() 
         while t!='}}':
-            l.append(value)
+            value,d=self.translatePitch(value)
+            value=self.pitchToMidi(value)
+            l.append(['list',[['string',value],['number',d]]])
             value,t=self.expectToken([',','}}'])
             if t!='}}':
                 value,t=self.nextToken() 
         return l,'listMidi'
 
 
+    def pitchToMidi(self, value):
+        # 8.00 == middle C == 60
+        octave,note=value.split('.')
+        try:
+            octave=int(octave)
+            note=int(note)
+        except ValueError:
+            self.printError('error converting ' + value + ' to midi note')
+            
+        mn= octave*12 + note - 36
+        if mn<0 or mn>127:
+            self.printError('error converting ' + value + ' to midi note')
+        return mn
+        
     def translatePitch(self,value):
         try:
             float(value)
@@ -1904,6 +2022,7 @@ class Interpreter:
             c=self.peekNextChar()
             if c!=':':
                 v2,t2=self.readValueScore()
+                print(v2,t2)
                 if t2 in ['listPitch','listMidi']:
                     r=[]
                     for i in range(len(v2)):
@@ -1992,6 +2111,8 @@ class Interpreter:
                 return [self.lineNumber] + self.readWhile()
             else:
                 if self.isInstrument(token):
+                    t,instr=self.getSymbol(token)
+                    instr[1].used=True
                     self.expectToken([':'])
                     return [self.lineNumber,':',token]
                 else:
@@ -2206,6 +2327,8 @@ class Interpreter:
         v=self.getScoFunction(name)
         f=v[0]
         tf=v[1]
+        if f=='' : #### or tf=='':
+            self.printError('Unkown function '+name)
         numParams=v[2]
         if numParams!=-1 and numParams!=len(params):
             self.printError('wrong number of parameters')
@@ -2348,31 +2471,34 @@ class Interpreter:
     def write(self,instr,t1,t2): 
         self.env='local'
         for instrument in self.song.orchestra.instruments: #finish the instrument compilation
-            par=instrument.mod_params
-            instructions=instrument.instr
-            name=instrument.name
-            self.symbolTable['local']=instrument.table
-            returnParms=self.determineTypeOfOutputs(name,par,instructions)
-            instrument.insertZakOuts(returnParms)
-            self.cleanSymbolTable('local')
+            if type(instrument) is Instrument:
+                par=instrument.mod_params
+                instructions=instrument.instr
+                name=instrument.name
+                self.symbolTable['local']=instrument.table
+                returnParms=self.determineTypeOfOutputs(name,par,instructions)
+                instrument.insertZakOuts(returnParms)
+                self.cleanSymbolTable('local')
 
         for instrument in self.song.orchestra.instruments: #finish the instrument compilation
-            instructions=instrument.instr
-            self.symbolTable['local']=instrument.table
-            inputs=self.determineTypeOfInputs(instructions)
-            instrument.insertInputs(inputs)
-            self.cleanSymbolTable('local')
+            if type(instrument) is Instrument:
+                instructions=instrument.instr
+                self.symbolTable['local']=instrument.table
+                inputs=self.determineTypeOfInputs(instructions)
+                instrument.insertInputs(inputs)
+                self.cleanSymbolTable('local')
 
         self.connectInstruments()
 
         for instrument in self.song.orchestra.instruments: #second pass
-            par=instrument.mod_params
-            instructions=instrument.instr
-            name=instrument.name
-            self.symbolTable['local']=instrument.table
-            text=self.printInstrument(instrument,par,instructions)    
-            instrument.text=text
-            self.cleanSymbolTable('local')
+            if type(instrument) is Instrument:
+                par=instrument.mod_params
+                instructions=instrument.instr
+                name=instrument.name
+                self.symbolTable['local']=instrument.table
+                text=self.printInstrument(instrument,par,instructions)    
+                instrument.text=text
+                self.cleanSymbolTable('local')
 
         self.env='general'
         for line in self.song.orchestra.globalSection + self.song.orchestra.globalFunctions :
@@ -2406,13 +2532,13 @@ class Interpreter:
             elif token=='score':
                 self.state=self.SCORE
                 self.readScore()
-            elif token=='include':          # instrument file
-                name,t=self.nextToken()
-                try:
-                    self.includeFile=open(name)
-                    self.include=name
-                except IOError:
-                    self.printError('error opening file '+name)
+            #elif token=='include':          # instrument file
+            #    name,t=self.nextToken()
+            #    try:
+            #        self.includeFile=open(name)
+            #        self.include=name
+            #    except IOError:
+            #        self.printError('error opening file '+name)
             elif token=='patchboard':
                 self.state=self.PATCH
                 self.connections=self.readPatch()
