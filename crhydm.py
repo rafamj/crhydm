@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from types import FunctionType
 import sys
 import copy
 
@@ -22,12 +23,23 @@ class Options:
 
 
 class InstrumentBase:
-    def __init__(self,n,par):
+    def __init__(self,n,par, pitchPar, midiPar):
         self.name=n
         self.params=['p1','p2','p3'] + par
+        self.pitchPar=pitchPar
+        self.midiPar=midiPar
         self.used=False
 
     def getPositionOfParameter(self,p):
+        try:
+            return self.params.index(p)
+        except ValueError:
+            print('Error. ' + p + ' is not a parameter of ' + self.name + '.')
+            exit()
+            #return -1
+
+    def getPositionOfParameterNext(self,p):
+        p += '_next'
         try:
             return self.params.index(p)
         except ValueError:
@@ -42,8 +54,8 @@ class InstrumentBase:
 
 class Instrument(InstrumentBase):
 
-    def __init__(self,n,par,table,instr, mod_params):
-        InstrumentBase.__init__(self,n,par)
+    def __init__(self,n,par,pitchPar, midiPar, table,instr, mod_params):
+        InstrumentBase.__init__(self,n,par, pitchPar, midiPar)
         self.zakOuts=[] # every element tuple with: (out,type,zak number)
         self.inputs=[]
         self.table=table #symbol table
@@ -61,7 +73,7 @@ class Instrument(InstrumentBase):
 
 class Instr(InstrumentBase):
     def __init__(self,name,text):
-        InstrumentBase.__init__(self,name,[])
+        InstrumentBase.__init__(self,name,[],[],[])
         self.text=text
 
 
@@ -191,7 +203,10 @@ class Score:
                     if t>=t1 and t<t2: #time
                         segment.append(line[i])
                     i=i+1
-                self.applyVariations(instr,segment,[par,v1,v2])
+                if v2==-1: #v1 is a function
+                    self.applyFunction(instr,segment, [par] + v1)
+                else:
+                    self.applyVariations(instr,segment,[par,v1,v2])
 
     def insertLineInInstrument(self,instr,l):
         for score  in self.list:
@@ -269,6 +284,9 @@ class Score:
         if len(l)==0:
             return
         n=variation[0]
+        if n=='callLater':
+            self.applyFunction(instr,l,variation[1])
+            return
         t0=0
         i=len(l)-1
         dur=0
@@ -283,7 +301,7 @@ class Score:
             return
         
         parN=instr.getPositionOfParameter(n)
-        glissN=instr.getPositionOfParameter(n + '_next')
+        glissN=instr.getPositionOfParameterNext(n)
         nVars=0
         for v in variation:
           if v!='>':
@@ -313,6 +331,9 @@ class Score:
                 if line[0]!=SILENCE_CHAR and line[0]!=PROL_CHAR:
                     t=float(line[0])
                     if t>=t1 and t<=t2: #time
+                        if t2==t1:
+                            print('Trying to vary parameter ' + n + ', instrument ' + instr.name + ' in an instant of time')
+                            exit()
                         line[parN-1]=str(v1+(v2-v1)*(t-t1)/(t2-t1))
                         if glissN!=-1:
                             if g:
@@ -321,28 +342,80 @@ class Score:
                                 line[glissN-1]=line[parN-1]
             i+=2
             t1=t2
+
+    def applyFunction(self,instr,l,variation):
+        f=variation[3][0]
+        if len(l)==0:
+            return
+        n=variation[0]
+        i=len(l)-1
+        dur=0
+        lastDur=float(l[i][1])
+        while (l[i][0]==SILENCE_CHAR or l[i][0]==PROL_CHAR) and i>0:
+            dur += float(l[i][1])
+            i-=1
+        if l[i][0]!=SILENCE_CHAR and l[i][0]!=PROL_CHAR:
+            dur +=float(l[i][1])
+            te=float(l[i][0]) 
+        else:
+            return
+        parN=instr.getPositionOfParameter(n)
+        for line in l:
+            if line[0]!=SILENCE_CHAR and line[0]!=PROL_CHAR:
+                t=float(line[0])
+                if t>=0 and t<=te+dur: #time
+                    p1=line[parN-1]
+                    p2=t/(te+dur)
+                    func="f('" + p1 + "'," + str(p2) + ","
+                    for p in variation[2]:
+                        func += str(p) + ','
+                    func=func[:-1]
+                    func+=')'
+                    line[parN-1]=eval(func)
         
+    
     def applyValues(self,instr,lines,values):
         if len(lines)==0:
             return
-            
         val=self.translateValues(instr,values)
+        if val[0]==-1:
+            fromTheEnd=True
+            val.pop(0)
+        else:
+            fromTheEnd=False
+            
         for v in val:
-            par=v[0]
+            #par=v[0]
+            par=v.pop(0)
             parN=instr.getPositionOfParameter(par)-1
-            i=0
-            j=1
+            if fromTheEnd:
+                i=len(lines)-1
+                v=v[::-1] # reverse
+            else:
+                i=0
+            j=0
             while j<len(v):
                 if not (lines[i][0]==PROL_CHAR or lines[i][0]==SILENCE_CHAR):
-                    lines[i][parN]=str(v[j])
+                    if str(v[j])!='?':
+                        lines[i][parN]=str(v[j])
                     j=j+1
-                i=i+1
-                if i>=len(lines):
-                    break 
+                if fromTheEnd:
+                    i=i-1
+                    if i<0:
+                        break
+                else:
+                    i=i+1
+                    if i>=len(lines):
+                        break 
                 
     def translateValues(self,instr,l):
         values=[]
         newList=[]
+        if l[0]==-1:
+            fromTheEnd=True
+            l.pop(0)
+        else:
+            fromTheEnd=False
         for i in range(len(l)):
             if l[i]==',':
                 values.append(newList)
@@ -353,7 +426,7 @@ class Score:
         newValues=[]
         for v in values: # take care of the glissandi
             par=v[0]
-            if instr.getPositionOfParameter(par + '_next')!=-1:
+            if instr.getPositionOfParameterNext(par)!=-1:
                 nv=[par]
                 nvg=[par + '_next']
                 i=1
@@ -370,7 +443,8 @@ class Score:
                 newValues.append(nvg)
             else:
                 newValues.append(v)
-
+        if fromTheEnd:
+            newValues.insert(0,-1) #restore the -1 at the start
         return newValues
                 
     def insertString(self,instr,s):
@@ -800,7 +874,7 @@ class Interpreter:
         for i in range(len(pat)):
             note=pat[i][0]
             dur=pat[i][1]
-            if note=='0.00':
+            if note=='0.00' or note ==-36:
                 trans+=SILENCE_CHAR
             else:
                 trans+=NOTE_CHAR
@@ -1157,8 +1231,8 @@ class Interpreter:
             self.unread('#')    
             return 0
         if token=='instrument':
-            name,parameters,par,table,instr=self.readInstrumentText() #par is like parameters but with some of then anulled
-            i=Instrument(name,parameters,table,instr,par)
+            name,parameters,par,pitchPar,midiPar,table,instr=self.readInstrumentText() #par is like parameters but with some of then anulled
+            i=Instrument(name,parameters,pitchPar,midiPar,table,instr,par)
             self.insertSymbol(name,'instrument',[name,i])
             self.song.insertInstrument(i)
             return ''
@@ -1379,6 +1453,8 @@ class Interpreter:
             self.symbolTable[name]['dictionary']={}
         par=[]
         glissPar=[]
+        pitchPar=[]
+        midiPar=[]
         p,t1=self.nextToken()
         if p=='=':
             n,t=self.nextToken()
@@ -1386,6 +1462,8 @@ class Interpreter:
             i=v[1]
             par = copy.deepcopy(i.params[3:])
             mod_params=copy.deepcopy(i.mod_params)
+            pitchPar=copy.deepcopy(i.pitchPar)
+            midiPar=copy.deepcopy(i.midiPar)
             table=copy.deepcopy(i.table)
             tok,t=self.nextToken()
             if tok=='(':
@@ -1398,11 +1476,15 @@ class Interpreter:
                     mod_params.remove(n)
                     table[n]=['l',nn] #literal
                     tok,t=self.expectToken([')',','])
-            return name, par, mod_params, table, i.instr
+            return name, par, mod_params, pitchPar, midiPar,table, i.instr
         else:
             while p!='\n':
-                if p=='+':
+                if p=='+': #glissable parameter
                     glissPar.append(par[-1])
+                elif p==':': #octave.pitch notation
+                    pitchPar.append(par[-1])
+                elif p=='%': #midi notation
+                    midiPar.append(par[-1])
                 else:
                     par.append(p)
                 p,t1=self.nextToken()
@@ -1433,7 +1515,7 @@ class Interpreter:
         table=self.symbolTable['local']
         self.cleanSymbolTable('local')
         self.env='general'
-        return name, parameters, par, table, instr
+        return name, parameters, par, pitchPar, midiPar, table, instr
 
     def isEndin(self,line):
         n=line.find('endin')  ###
@@ -1483,10 +1565,47 @@ class Interpreter:
         return 'i'   
 
 
-    def createVarlist(self,v1,t1,v2,t2):
+    def isParPitch(self,par):
+        t,instr=self.getSymbol(self.env)
+        return par in instr[1].pitchPar
+        
+    def isParMidi(self,par):
+        t,instr=self.getSymbol(self.env)
+        return par in instr[1].midiPar
+        
+        
+    def createVarlist(self,v1,t1,v2,t2,isPattern=False):
         if t1 == 'list':
-             if t2 in ['list','listPitch','listMidi']:
+             if t2 in ['callLater']:
+                 if isPattern:
+                     v2,t2=self.callFunction(v2[0],v2[1])
+                 else:
+                     return ['callLater',v1+v2],'callLater'
+             if t2 in ['list'] :
                  return ['listVar',v1+v2],'listVar'
+             if t2 in ['listPitch','listMidi']:
+                 if not isPattern:
+                     r=[]
+                     for e in v2:
+                         r.append(e[0])
+                     v2=r    
+                 return ['listVar',v1+v2],'listVar'
+             if t2 in ['string']:
+                 v2=v2.split()
+                 m=self.isParMidi(v1[0])
+                 if self.isParPitch(v1[0]) or m:
+                     r=[]
+                     for e in v2:
+                         p,d=self.translatePitch(e)
+                         if m:
+                             p=self.pitchToMidi(p)
+                         if isPattern:    
+                             r.append([p,d])
+                         else:
+                             r.append(p)
+                 else:
+                     r=v2
+                 return ['listVar',v1+r],'listVar'
         self.printError('types '+t1+' and '+t2+" can't be added")
     
     def sumValues(self,v1,t1,v2,t2):
@@ -1525,13 +1644,13 @@ class Interpreter:
                  return v1+v2,t1
         elif t1=='listVar':
              if t2=='listVar': #if the lists are of the same parameter, they are concatenated
-                if v1[0]==v2[0]:
-                    aux=v1[1]
-                    aux.append(',')
+                if v1[1][0]==v2[1][0]:
+                    #aux=v1[1]
+                    #aux.append(',')
                     #v2.pop(0)
-                    return [v1[0], aux +  v2[1:][0]] , 'listVar'
+                    return ['listVar', v1[1] + v2[1][1:]] , 'listVar'
                 else:
-                    return v1 + [','] + v2,'listVar'
+                    return ['listVar', v1[1] + [','] + v2[1]],'listVar'
         self.printError('types '+t1+' and '+t2+" can't be added")
 
     def sum(self,v1,t1,v2,t2):
@@ -1544,6 +1663,9 @@ class Interpreter:
         if t1=='number':
             if t2=='number':
                 return v1-v2,'number'
+        elif (t1=='pattern' or t1=='listVar') and  t2=='listVar':
+            v2[1].insert(0,-1)
+            return self.sumValues(v1,t1,v2,t2)
         self.printError('types '+t1+' and '+t2+" can't be substracted")
 
     def orValues(self,v1,t1,v2,t2):
@@ -1607,6 +1729,10 @@ class Interpreter:
                 return self.multiplyPattern(v1,v2),'pattern'
             if t2=='listVar':
                 v2,t=self.getValue(v2,True)
+                v1.append(v2)
+                v1.extend('*')
+                return v1,'pattern'
+            if t2=='callLater':
                 v1.append(v2)
                 v1.extend('*')
                 return v1,'pattern'
@@ -1845,7 +1971,11 @@ class Interpreter:
         while t!='}}':
             value,d=self.translatePitch(value)
             value=self.pitchToMidi(value)
-            l.append(['list',[['string',value],['number',d]]])
+            if value!=-1:
+                l.append(['list',[['string',value],['number',d]]])
+            else:
+                value,t=self.nextToken() ## read the ',' and the next note
+                value,t=self.nextToken()
             value,t=self.expectToken([',','}}'])
             if t!='}}':
                 value,t=self.nextToken() 
@@ -1854,6 +1984,8 @@ class Interpreter:
 
     def pitchToMidi(self, value):
         # 8.00 == middle C == 60
+        if value=='>':
+            return -1
         octave,note=value.split('.')
         try:
             octave=int(octave)
@@ -1862,7 +1994,8 @@ class Interpreter:
             self.printError('error converting ' + value + ' to midi note')
             
         mn= octave*12 + note - 36
-        if mn<0 or mn>127:
+        
+        if value!='0.00' and (mn<0 or mn>127):
             self.printError('error converting ' + value + ' to midi note')
         return mn
         
@@ -1887,6 +2020,10 @@ class Interpreter:
                     else:
                         break
                 return '0.00', duration
+            elif value[0]=='>':
+                return value[0],0
+            elif value[0]=='?':
+                return value[0],0
             else:
                 octave=''
                 note=ord(value[0])
@@ -1949,6 +2086,22 @@ class Interpreter:
         self.octave=octave
         return octave + '.' + v, duration
 
+    def readVarlist(self):
+        token=''
+        ch=self.nextChar()
+        while ch !='/':
+            token+=ch
+            ch=self.nextChar()
+            if len(ch)==0:
+                return None
+        l=token.split()
+        par=l.pop(0)
+        res= ['++',['list',[['string',par]]], ['string', ' '.join(l)]] #++ means createVarlist
+        return res,''
+
+
+
+
     def readValueScore(self): # number | string | pattern | ( expr )
         value,t=self.nextToken()
         if t=='number':
@@ -1977,10 +2130,12 @@ class Interpreter:
                       par.append(v1)
                   else:
                       v1,t1=self.nextToken()
-                if value!='ftgen':
-                    return [value, par],'call' 
-                else:
+                if value=='ftgen':
                     return [value, par],'ftgen'
+                elif value=='var':
+                    return [value, par],'var' 
+                else:
+                    return [value, par],'call'
             elif v1=='[': # list element
                 value=['index',[t,value]]
                 while v1=='[':
@@ -2000,6 +2155,8 @@ class Interpreter:
             return self.readListPitch()
         elif t== '{{':
             return self.readListMidi()
+        elif t== '/':
+            return self.readVarlist()
         elif t=='(':
             value,t=self.readExpression()
             v,ty=self.nextToken()
@@ -2019,22 +2176,12 @@ class Interpreter:
             return v1,t1
         else:
             self.expectToken([':'])
-            c=self.peekNextChar()
-            if c!=':':
-                v2,t2=self.readValueScore()
-                print(v2,t2)
-                if t2 in ['listPitch','listMidi']:
-                    r=[]
-                    for i in range(len(v2)):
-                        r.append(v2[i][1][0])
-                    v2=r
-                    t2='list'
-            else:
-                self.expectToken([':'])
-                v2,t2=self.readValueScore()
+            v2,t2=self.readValueScore()
+            if t2=='call':
+                t2='callLater'
             if t2!='':
                 v2=[t2,v2]
-            res= ['++',['list',[[t1,v1]]], v2]
+            res= ['++',['list',[[t1,v1]]], v2] #++ means createVarlist
             return  res,''
         
         
@@ -2109,6 +2256,8 @@ class Interpreter:
                 return [self.lineNumber] + self.readIf()
             elif token=='while':
                 return [self.lineNumber] + self.readWhile()
+            elif token=='define':
+                return [self.lineNumber] + self.readDefine()
             else:
                 if self.isInstrument(token):
                     t,instr=self.getSymbol(token)
@@ -2175,6 +2324,29 @@ class Interpreter:
                 instructions.append(i)
             token,t=self.nextToken()
         return ['while',condition,instructions]
+        
+    def readDefine(self):
+        retval,t=self.nextToken()
+        name,t=self.nextToken()
+        instructions='def ' + name
+        stop=False
+        while not stop:
+            c=self.nextChar()
+            if c=='e': # enddefine?
+               k=c
+               i=0
+               while i <len('enddefine') and k[i]=='enddefine'[i]:
+                   c=self.nextChar()
+                   k+=c
+                   i+=1
+               if i==len('enddefine'):
+                   stop=True
+               else:
+                   instructions+=k
+            else:
+                instructions+=c
+        return ['define',name, instructions,retval] 
+
     
     def readScore(self):
         instructions=[]
@@ -2243,6 +2415,24 @@ class Interpreter:
                     cond,t=self.getValue(instr[2])
             elif instr[1]=='call':
                 self.getValue(instr[1:])
+            elif instr[1]=='var':
+                if instr[2][0]=='var':
+                    t1,t=self.getValue(instr[2][1][0])
+                    t2,t=self.getValue(instr[2][1][1])
+                    parameter,t=self.getValue(instr[2][1][2])
+                    instrum=self.getSymbol(self.env)
+                    if instr[2][1][3][0]=='call':
+                        instr[2][1][3][0]='callLater'
+                        func,t=self.getValue(instr[2][1][3])
+                        self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,func,-1) #-1 -> is function
+                    else:
+                        v1,t=self.getValue(instr[2][1][3])
+                        v2,t=self.getValue(instr[2][1][4])
+                        self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,float(v1),float(v2))                       
+            elif instr[1]=='define':
+                code=compile(instr[3],'','exec')
+                func_code = FunctionType(code.co_consts[0], globals(), instr[2])
+                self.insertScoFunction(instr[2],[func_code,instr[4],-1])
             else:
                 self.printError('Unkown instruction '+instr[1])
         self.lineNumber=ant_lineNumber
@@ -2274,17 +2464,31 @@ class Interpreter:
         elif a[0]=='pattern':
             time,t=self.getValue(a[1][0])
             parts,t=self.getValue(a[1][1])
+            if a[1][2][0]=='++':
+                a[1][2][0]='+++' #create listVar inside a pattern definition
             pat,tp=self.getValue(a[1][2])
             modPat,t=self.getValue(a[1][3])
             n,t=self.getValue(a[1][4])
-            if tp == 'listVar':
+            if tp== 'listVar':
                 pat,notes=self.extractPattern(pat,parts)
                 pattern=[Pattern(time,parts,pat,modPat,n) ,notes, '.']
-            else:
+            else:  # string
                 pattern=[Pattern(time,parts,pat,modPat,n)] #pat without the ' or "
             return pattern,'pattern'
         elif a[0]=='call':
             return self.callFunction(a[1][0],a[1][1])
+        elif a[0]=='callLater':
+            r=[]
+            for e in a[1][1]:
+                if type(e)==list:
+                    ne,t=self.getValue(e,isList)
+                    r.append(ne)
+                else:
+                    r.append(e)
+            f=self.getScoFunction(a[1][0])
+            return [a[1][0],r,f],'callLater'
+        #    print(self.callFunction(a[1][0],a[1][1]))
+            exit()
         elif a[0]=='ftgen':
             return a[1:],'ftgen'
         elif a[0]=='index':
@@ -2296,13 +2500,15 @@ class Interpreter:
              else:
                  v,t=self.getValue(value[int(i)])
              return v,t
-        elif a[0] in ['++','+','-','*','/','%','^','||','&&','==','!=','>=','<=','<','>']:
+        elif a[0] in ['+++','++','+','-','*','/','%','^','||','&&','==','!=','>=','<=','<','>']:
             v1,t1=self.getValue(a[1])
             v2,t2=self.getValue(a[2])        
             if a[0]=='+':
                 return self.sumValues(v1,t1,v2,t2)
             if a[0]=='++':
-                return self.createVarlist(v1,t1,v2,t2)
+                return self.createVarlist(v1,t1,v2,t2) # normal
+            elif a[0]=='+++':
+                return self.createVarlist(v1,t1,v2,t2,True) #inside a pattern definition
             elif a[0]=='-':
                 return self.subValues(v1,t1,v2,t2)
             elif a[0]=='*':
@@ -2334,10 +2540,10 @@ class Interpreter:
             self.printError('wrong number of parameters')
         p=[]
         for x in params:
-          v,t=self.getValue(x)
+          val,t=self.getValue(x)
           if t in ['list','listVar','listPitch','listMidi'] :
-              v=self.getListValue(v)
-          p.append(v)
+              val=self.getListValue(val)
+          p.append(val)
         if f!='':
             if tf=='':
                 f(*p)
@@ -2441,11 +2647,13 @@ class Interpreter:
         if token=='(':
             n,t=self.readExpression()
             if t=='number':
+                n=self.getValue(n)[0]
                 t1=float(n)
             token,t=self.nextToken()
-            if t==':':
+            if t==',':
                 n,t=self.readExpression()
                 if t=='number':
+                    n=self.getValue(n)[0]
                     t2=float(n)
             else:    
                 self.printError('syntax error')
@@ -2660,8 +2868,6 @@ class Interpreter:
               ['print',[print,'',-1]], ####
               
               ['getTime',[self.execGetTime,'number',0]],
-              ['var',[self.execVar,'',5]],
-              ['par',[self.execPar,'',3]],
               ['tempo',[self.execTempo,'',1]],
              ]
         for f in func:
@@ -2675,11 +2881,11 @@ class Interpreter:
             return 0
 
 
-    def execVar(self,t1,t2,parameter,v1,v2):
+    def execVar(self,t1,t2,parameter,v1,v2): ############
         instrum=self.getSymbol(self.env)
         self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,float(v1),float(v2))
 
-    def execPar(self,t1,parameter,l):
+    def execPar(self,t1,parameter,l):  ############
         instrum=self.getSymbol(self.env)
         self.song.insertParameters(instrum[1][1],t1,parameter,l)
 
