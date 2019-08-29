@@ -28,14 +28,24 @@ instrument wave
     <<sigl,sigr
 endinstrument
 
-instrument mixer vFm+ pFm+ vWave+ pWave+ vEcho+ pEcho+
+instrument mixer
+
+//the volumes and pans are defined by a linseg of duration p3
+  vFm=linseg(1,p3-5,1,5,0)
+  pFm=linseg(0,p3,1)
+  vWave=linseg(0.1,p3-5,0.1,5,0)
+  pWave=linseg(1,p3,0)
+  vEcho=linseg(0.5,p3-5,0.5,5,0)
+  pEcho=linseg(0,p3,1)
+  genVol=linseg(1,p3-5,1,5,0)
+
   Fm>>fml,fmr
   wave>>wl,wr
   echo>>sl,sr
 
     mr=vFm*fmr*pFm+vWave*wr*pWave+vEcho*pEcho*sl
     ml=vFm*fml*(1-pFm)+wl*vWave*(1-pWave)+vEcho*(1-pEcho)*sr
-    outs(mr,ml)
+    outs(mr*genVol,ml*genVol)
 
     <<mr,ml
 endinstrument
@@ -64,8 +74,7 @@ endinstrument
   wave:
     <<|(Fm.t2-Fm.t1)/12,1,'*'| * 12
   mixer:
-    <<|Fm.t2-Fm.t1,1,'*'| + 'pFm':[0,'>',1] + 'vFm':[1] + 'pWave':[1,'>',0] + 'vWave':[0.1] + 'vEcho':[0.5] + 'pEcho':[0,'>',1]
-    <<|1,1,'*'| + 'vFm':[1,'>',0 ]+ 'vWave':[0.1,'>',0] + 'vEcho':[0.5,'>',0]
+    <<|Fm.t2-Fm.t1+5,1,'*'| 
   echo:
     <<|Fm.t2-Fm.t1,1,'*'| + 'rvt':[2] + 'lpt':[0.3]  
     <<|1,1,'*'|

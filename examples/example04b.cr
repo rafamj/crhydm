@@ -71,10 +71,9 @@ endinstrument
   wave:
     <<|(Fm.t2-Fm.t1)/12,1,'*'| * 12
   mixer:
-    <<|Fm.t2-Fm.t1,1,'*'| + 'pFm':[0,'>',1] + 'vFm':[1] + 'pWave':[1,'>',0] + 'vWave':[0.1] + 'vEcho':[0.5] + 'pEcho':[0,'>',1]
-    <<|1,1,'*'| + 'vFm':[1,'>',0 ]+ 'vWave':[0.1,'>',0] + 'vEcho':[0.5,'>',0]
+    <<|Fm.t2-Fm.t1+10,1,'*'| + 'pFm':[0,'>',1] + 'vFm':[1] + 'pWave':[1,'>',0] + 'vWave':[0.1] + 'vEcho':[0.5] + 'pEcho':[0,'>',1]
+    <<|10,1,'*'| + 'vFm':[1,'>',0 ]+ 'vWave':[0.1,'>',0] + 'vEcho':[0.5,'>',0]    //calling again mixer produces a click 
   echo:
-    <<|Fm.t2-Fm.t1,1,'*'| + 'rvt':[2] + 'lpt':[0.3]  
-    <<|1,1,'*'|
+    <<|Fm.t2-Fm.t1+10,1,'*'| + 'rvt':[2] + 'lpt':[0.3]  
 #end
 

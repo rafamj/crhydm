@@ -2,7 +2,7 @@
   //-odac
   //-odac  -Ma
   //-Q hw:1
--+rtmidi=alsaseq -Q128 -odac
+-+rtmidi=alsaseq -Q20 -odac
 
 #orchestra
   //sr = 44100

@@ -14,8 +14,8 @@ swing demo using the parameters 4 and 5 when creating a pattern
   0dbfs = 1
 
 instrument Bass vol freq pan
-    tb=ftgen(0, 0, 16384, 10, 1)
-    env=linseg(0, .002, 1, p3 - 0.004, 1, .002, 0)
+    tb=ftgen(0, 0, 16384, 10, 1)  // sine wave
+    env=linseg(0, .02, 1, p3 - 0.04, 1, .02, 0)
     sig=buzz(ampdbfs(vol),cpspch(freq),8,tb)
     outs(env*sig*pan,env*sig*(1-pan))
 endinstrument
@@ -34,8 +34,8 @@ endinstrument
 
         n=0
         while n<=10
-            pattern1=|4,16,'freq'::(notes[n%4]*2)| + 'vol':[vol] + 'pan':[0]
-            pattern2=|4,16,'freq'::(notes[n%4]*2),s*8,n/10| + 'vol':[vol] + 'pan':[1] //with swing
+            pattern1=|4,16,'freq':(notes[n%4]*2)|          + 'vol':[vol] + 'pan':[0]
+            pattern2=|4,16,'freq':(notes[n%4]*2),s*8,n/10| + 'vol':[vol] + 'pan':[1] //with swing
             <<pattern1+pattern2
             n+=1
         endwhile

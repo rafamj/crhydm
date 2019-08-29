@@ -24,7 +24,8 @@
     t1=ftgen(0,0,0,1,"drum.wav",0,0,0)
 
     sig=loscil(ampdbfs(amp),freq,t1,1,1)
-    outs(sig,sig)
+    env=linseg(0, .02, 1, .02, 0)
+    outs(sig*env,sig*env)
   endinstrument
 
 #score
@@ -33,19 +34,22 @@
    n=10
   
   Synth:
-    adsr=' a 0.001 d 0.09 s 0.6 r 0.01 '
+    adsr1=' a 0.01 d 0.09 s 0.6 r 0.01 '
+    adsr2=' a 0.06 d 0.04 s 0.4 r 0.02 '
 
-    'a'> adsr
+    'a' > adsr1  
+    'b' > adsr2
  
-//pattern: duration=4, parts=16, pattern='aaaaaaaaaaaaaaaa'
+     //pattern: duration=4, parts=16, pattern='abaabaaaaabaaaaa'
 
-  p1=|4,16,'a'*16| + 'note':{c6, d, f, e,   f+, d, a, g,   g-, a, b, a,  g, f,e, d} + 'amp':[-10]
+    p1=|4,16,'abaabaaaaabaaaaa'| + 'note':{c6, d, f, e,   f+, d, a, g,   g-, a, b, a,  g, f,e, d} + 'amp':[-10]
 
-  << p1*n * 'cutoff':[80,300] * 'res':[0.8,0.99] * 'pan':[0,1]
+    << p1*n * 'cutoff':[80,300] * 'res':[0.8,0.99] * 'pan':[0,1]
 
   Drum:
-  'a' > 'freq 1'
-  'b' > 'freq 1.3'
-  <<|4,16,'axbaxabxaxxaxxbb'|*n + 'vol':[-13] 
+    'a' > 'freq 1'
+    'b' > 'freq 1.3'
+    <<|4,16,'axbaxabxaxxaxxbb'|*n + 'amp':[-13] 
 #end
-
+//#end Synth
+//#end(0,4)Drum
