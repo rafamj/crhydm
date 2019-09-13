@@ -20,6 +20,7 @@ iamp   = p4
 ifqc   = cpspch(p5)
 irez   = p7
 itabl1 = p8
+ipan   = p9
 
 ; Amplitude envelope
 kaenv  linseg 0, .01, 1, p3-.02, 1, .01, 0
@@ -45,10 +46,10 @@ aynm2 init 0
 
 ; Amp envelope and output
   aout = ayn * kaenv
-  outs aout,aout
+  outs ipan*aout,(1-ipan)*aout
 endin
 
-rename 1 Synth amp note fqc rez tabl1
+rename 1 Synth amp note fqc rez tabl1 pan
 
 #score
 f1=ftgen(0, 1024, 10, 1)
@@ -94,5 +95,7 @@ f7=ftgen(0, 1024,   8, -.8, 42, -.78,  400, -.7, 140, .7,  400, .78, 42, .8)
         var(0,t,'rez',10,90) 
         var(0,60,'amp',0.1,0.005)
         var(60,t,'amp',0.1,0.01)
+        put(0,'pan',[0.5])
+        put(t/2,'pan',[0,1,0,1,0.5])
 #end 
 
