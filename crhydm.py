@@ -1576,7 +1576,7 @@ class Interpreter:
         
     def createVarlist(self,v1,t1,v2,t2,isPattern=False):
         if t1 == 'list':
-             if t2 in ['callLater']:
+             if t2 in ['call','callLater']: #####
                  if isPattern:
                      v2,t2=self.callFunction(v2[0],v2[1])
                  else:
@@ -2186,8 +2186,11 @@ class Interpreter:
             return v1,t1
         else:
             self.expectToken([':'])
+            c=self.peekNextChar()
+            if c==':':
+                self.expectToken([':'])
             v2,t2=self.readValueScore()
-            if t2=='call':
+            if c==':' and t2=='call':
                 t2='callLater'
             if t2!='':
                 v2=[t2,v2]
@@ -2563,7 +2566,7 @@ class Interpreter:
             v2,t2=self.getValue(a[2])        
             if a[0]=='+':
                 return self.sumValues(v1,t1,v2,t2)
-            if a[0]=='++':
+            elif a[0]=='++':
                 return self.createVarlist(v1,t1,v2,t2) # normal
             elif a[0]=='+++':
                 return self.createVarlist(v1,t1,v2,t2,True) #inside a pattern definition
@@ -2599,8 +2602,10 @@ class Interpreter:
         p=[]
         for x in params:
           val,t=self.getValue(x)
-          if t in ['list','listVar','listPitch','listMidi'] :
-              val=self.getListValue(val)[1] #only the list
+          if t in ['list','listVar'] :
+              val=self.getListValue(val)[1] ####only the list
+          elif t in ['listPitch','listMidi'] :
+              val=self.getListValue(val)[0]
           p.append(val)
         if f!='':
             if tf=='':
