@@ -1,8 +1,7 @@
 #options
 ;  -odac
 ;this file can't be rendered in real time
--W
-
+-W -o example10.wav
 #orchestra
   sr = 44100
   nchnls = 2
@@ -10,7 +9,7 @@
 
 #score
     tempo(120)
-    times=8
+    times=16
 
 
 #orchestra
@@ -72,7 +71,7 @@
           notes[3]= /freq f5  d     g  e     g  f    /
   
                      
-          pattern=|2,8,'***_*_**'| + /amp 0.3/ + /index 3/
+          pattern=|2,8,'***_*_**'| + /amp 0.3/ + /index 3/ + /mod 1/ 
           for n=0 to times-1
               pattern += notes[n%4] 
               reverse(notes[n%4])
@@ -82,22 +81,76 @@
           endfor
           t=getTime()
           var(0,t,'car',1,3)         
-          var(0,t,'mod',1,2)
 
+#orchestra
+
+  instrument scanTable amp freq:
+
+    pos=  ftgen(0, 0, 128, 10, 1);Initial Shape, sine wave range -1 to 1
+    mass= ftgen(0, 0, 128, -7, 1, 128, 1) ;Masses(adj.), constant value 1
+    stiff=ftgen(0, 0, 128, -7, 50, 64, 100, 64, 0) ;Stiffness; unipolar triangle range 0 to 100
+    damp= ftgen(0, 0, 128, -7, 1, 128, 1) ;Damping; constant value 1
+    vel=  ftgen(0, 0, 128, -7, 0, 128, 0) ;Initial Velocity; constant value 0
+
+    env=adsr(0.1,0.3,0.5,0.01)
+    a0=scantable(amp, cpspch(freq), pos, mass, stiff, damp, vel)
+    a1=oscil3(amp, cpspch(freq), pos)
+    a1=dcblock2(a1)
+    <<a1*env, a1*env
+  endinstrument
+
+#score
+
+  scanTable:
+
+     define list generateChord(root,type): #0 major 1 minor 2 dominant 3 mb5
+         root=root[0]
+         if type==0 or type==2:
+             third=inter.execTranspose(root,4)  #inter.execTranspose is function defined in the interpreter
+         else:
+             third=inter.execTranspose(root,3)
+
+         if type==3:
+             fifth=inter.execTranspose(root,6)
+         else:
+             fifth=inter.execTranspose(root,7)
+
+         if type==0:
+             seventh=inter.execTranspose(root,11)
+         else:
+             seventh=inter.execTranspose(root,10)
+     
+         return [root,third,fifth, seventh] 
+     enddefine
+
+      pattern=|4,1,"*"|^4  + /amp 0.1/
+      
+      for i=0 to (times-1)/8
+          <<pattern + 'freq':generateChord({a6},1)
+          <<pattern + 'freq':generateChord({b6},3) 
+          <<pattern + 'freq':generateChord({c7},0) 
+          <<pattern + 'freq':generateChord({d7},1) 
+          <<pattern + 'freq':generateChord({d7},1)
+          <<pattern + 'freq':generateChord({c7},0)
+          <<pattern + 'freq':generateChord({b6},3) 
+          <<pattern + 'freq':generateChord({a6},1) 
+      endfor
 #orchestra
   
   instrument mixer
       >>gl,gr
       >>fml,fmr
-
+      >>sctl,sctr
 
     vFm=1
-    pFm=0.5
+    pFm=0.4
     vg=1
     pg=0.4 + oscil(0.2,20/p3)
+    vsct=1
+    psct=0.6
 
-    mr=vFm*pFm*fmr+vg*pg*gr
-    ml=vFm*(1-pFm)*fml+vg*(1-pg)*gl
+    mr=vFm*pFm*fmr+vg*pg*gr+vsct*psct*sctr
+    ml=vFm*(1-pFm)*fml+vg*(1-pg)*gl+vsct*(1-psct)*sctl
     outs(mr,ml)
 
 endinstrument
@@ -109,8 +162,9 @@ endinstrument
 #patchboard
     mixer[0]<<Granular
     mixer[1]<<Fm
+    mixer[2]<<scanTable
 
-
+//#end scanTable mixer
 //#end Fm mixer
 //#end(0,4)
 #end

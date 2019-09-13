@@ -34,7 +34,8 @@
 
       Bass:
         pattern=|2,4,'freq':generate()| + /vol -15/   //the pattern is the return value of a function
-        <<pattern * 'pan':[1,0] * 'pan':vary(0.5)    // the function vary changes the values of the pattern
+        //'pan'::vary(0.5) the ::  indicates that the function is called later
+        <<pattern * 'pan':[1,0] * 'pan'::vary(0.5)    // the function vary changes the values of the pattern
         pattern=|2,8,'__x(**)__*'| + 'vol':'-20 ? -10'   // the ? indicates than this value is not changed
         pattern += 'freq':{e5,  f} + ('freq':{g} + 'pan':[1,0])
         <<pattern
@@ -55,8 +56,8 @@
         <<pattern 
         pattern += 'freq':'e5 f g'
         <<pattern * x:'1 0'
-        <<pattern * x:[1,0] * x:vary(a)
-        <<pattern * 'pan':[0,1] * 'pan':vary(0.1) - /freq e5 d c/   // makes the 3 last notes e d c
+        <<pattern * x:[1,0] * x::vary(a)
+        <<pattern * 'pan':[0,1] * 'pan'::vary(0.1) - /freq e5 d c/   // makes the 3 last notes e d c
 
         var(10,14,'pan',0,1)  // ensure that there is a  value and not a '.'
         var(10,14,'pan',vary(0.5))
