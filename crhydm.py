@@ -279,7 +279,7 @@ class Score:
         for p in l[1]: 
             self.insertLineInInstrument(instr,p)
         self.updateTime(instr,l[0])
-        
+
     def applyVariations(self,instr,l,variation):
         if len(l)==0:
             return
@@ -859,7 +859,7 @@ class Interpreter:
     def expectToken(self,v):
         value,t=self.nextToken()
         if t not in v:
-            self.printError('expected '+ str(v))
+            self.printError('expected '+ str(v) + '. Read ' + value)
         return value,t
 
 
@@ -1723,7 +1723,7 @@ class Interpreter:
             if t2 in ['list','listPitch','listMidi']:
                 return int(v1)*v2,t2
             if t2=='listVar':
-                return [v2[0]] + v2[1:]*int(v1),'listVar'
+                return [v2[0] , [v2[1][0]] +  v2[1][1:]*int(v1)],'listVar'
         elif t1=='pattern':
             if t2=='number':
                 return self.multiplyPattern(v1,v2),'pattern'
@@ -1744,7 +1744,7 @@ class Interpreter:
                 return int(v2)*v1,t1
         elif t1 == 'listVar':
             if t2=='number':
-                return [v1[0]] + v1[1:]*int(v2),'listVar'
+                return [v1[0] , [v1[1][0]] +  v1[1][1:]*int(v2)],'listVar'
         self.printError('types '+t1+' and '+t2+" can't be multiplied")
 
     def multiply(self,v1,t1,v2,t2):
@@ -2134,8 +2134,18 @@ class Interpreter:
                     return [value, par],'ftgen'
                 elif value=='var':
                     return [value, par],'var' 
+                elif value=='put':
+                    return [value, par],'put' 
                 else:
-                    return [value, par],'call'
+                    if value=='eval':
+                        v,t=self.getValue(par[0])
+                        if t=='string':
+                            self.line=v+self.line
+                            return self.readValueScore()
+                        else:
+                            self.printError('eval argument must be a string')
+                    else:
+                        return [value, par],'call'
             elif v1=='[': # list element
                 value=['index',[t,value]]
                 while v1=='[':
@@ -2256,6 +2266,8 @@ class Interpreter:
                 return [self.lineNumber] + self.readIf()
             elif token=='while':
                 return [self.lineNumber] + self.readWhile()
+            elif token=='for':
+                return [self.lineNumber] + self.readFor()
             elif token=='define':
                 return [self.lineNumber] + self.readDefine()
             else:
@@ -2324,7 +2336,26 @@ class Interpreter:
                 instructions.append(i)
             token,t=self.nextToken()
         return ['while',condition,instructions]
-        
+
+
+    def readFor(self):
+        instructions=[]
+        var,t=self.readExpression()
+        self.expectToken(['='])
+        init,t=self.readExpression()
+        token,t=self.expectToken(['identifier'])
+        if token!='to':
+            self.printError('to expected')
+        condition,t=self.readExpression()
+        token,t=self.nextToken()
+        while token!='endfor':
+            i=self.readInstruction(token,t)
+            if i != None:
+                instructions.append(i)
+            token,t=self.nextToken()
+        return ['for',var,init,condition,instructions]
+
+         
     def readDefine(self):
         retval,t=self.nextToken()
         name,t=self.nextToken()
@@ -2413,6 +2444,16 @@ class Interpreter:
                 while cond:
                     self.execInstructions(instr[3])
                     cond,t=self.getValue(instr[2])
+            elif instr[1]=='for':
+                init=[[instr[0],'=',instr[2],instr[3]]]
+                incr=[[instr[0],'+=',instr[2],['number',1]]]
+                self.execInstructions(init)
+                finalCondition=['<=',instr[2],instr[4]]
+                cond,t=self.getValue(finalCondition)
+                while cond:
+                    self.execInstructions(instr[5])
+                    self.execInstructions(incr)
+                    cond,t=self.getValue(finalCondition)
             elif instr[1]=='call':
                 self.getValue(instr[1:])
             elif instr[1]=='var':
@@ -2427,8 +2468,21 @@ class Interpreter:
                         self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,func,-1) #-1 -> is function
                     else:
                         v1,t=self.getValue(instr[2][1][3])
+                        if t not in ['string','number']:
+                            self.printError('string or number expected as fourth parameter of function var')
                         v2,t=self.getValue(instr[2][1][4])
+                        if t not in ['string','number']:
+                            self.printError('string or number expected as fifth parameter of function var')
                         self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,float(v1),float(v2))                       
+            elif instr[1]=='put':
+                if instr[2][0]=='put':
+                    t1,t=self.getValue(instr[2][1][0])
+                    parameter,t=self.getValue(instr[2][1][1])
+                    instrum=self.getSymbol(self.env)
+                    v1,t=self.getValue(instr[2][1][2])
+                    if t!='list':
+                        self.printError('list expected as third parameter of function put')
+                    self.song.insertParameters(instrum[1][1],t1,parameter,v1)
             elif instr[1]=='define':
                 code=compile(instr[3],'','exec')
                 func_code = FunctionType(code.co_consts[0], globals(), instr[2])
@@ -2450,7 +2504,11 @@ class Interpreter:
         elif a[0]=='identifier':
             t,v=self.getSymbol(a[1])
             if t=='':
-                self.printError('Unkown variable ' + a[1])
+                f=self.getScoFunction(a[1])
+                if f==None:
+                    self.printError('Unkown variable ' + a[1])
+                else:
+                    return f[0],'function'
             return v,t
         elif a[0] in ['list','listVar','listMidi','listPitch']:
             r=[]
@@ -2542,7 +2600,7 @@ class Interpreter:
         for x in params:
           val,t=self.getValue(x)
           if t in ['list','listVar','listPitch','listMidi'] :
-              val=self.getListValue(val)
+              val=self.getListValue(val)[1] #only the list
           p.append(val)
         if f!='':
             if tf=='':
@@ -2796,8 +2854,10 @@ class Interpreter:
             ['envlpx',['a','Xiiiiiii']], 
             ['expseg',['A','iii']], 
             ['expsegr',['A','iii']], 
-            ['foscil',['a','xkxxii']], 
+            ['foscil',['a','xkxxkii']], 
+            ['foscili',['a','xkxxkii']],
             ['grain',['a','xxxkkkiiii']], 
+            ['grain3',['a','kkkkkkikikkii']],
             ['line',['A','iii']],
             ['linseg',['A','iiii']],
             ['loscil',['a','xkiiiiiiii']],
@@ -2869,9 +2929,14 @@ class Interpreter:
               
               ['getTime',[self.execGetTime,'number',0]],
               ['tempo',[self.execTempo,'',1]],
+              ['array',[lambda x: [None] * x,'list',1]],
+              ['transposeNote',[self.execTranspose,'string',2]],
+              ['silence',[self.execSilence,'pattern',1]],
              ]
         for f in func:
             self.insertScoFunction(f[0],f[1])
+
+
 
     def execGetTime(self):
         instrument=self.env 
@@ -2881,17 +2946,21 @@ class Interpreter:
             return 0
 
 
-    def execVar(self,t1,t2,parameter,v1,v2): ############
-        instrum=self.getSymbol(self.env)
-        self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,float(v1),float(v2))
-
-    def execPar(self,t1,parameter,l):  ############
-        instrum=self.getSymbol(self.env)
-        self.song.insertParameters(instrum[1][1],t1,parameter,l)
-
     def execTempo(self,t):
         self.song.setTempo(self.env,t)
-    
+
+
+    def execTranspose(self,note,semitones):
+    #the note is a string in octave pitch format    
+        so,sn=note.split('.')
+        n=int(sn)+semitones
+        o=int(so)+ n//12
+        n=n%12
+        return str(o) + '.' + str(n).zfill(2)
+        
+    def execSilence(self,t):
+        return [Pattern(t,1,'x','',0)]
+             
     
 inFile=''
 outFile=''
