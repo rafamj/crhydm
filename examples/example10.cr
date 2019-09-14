@@ -106,7 +106,7 @@
      define list generateChord(root,type): #0 major 1 minor 2 dominant 3 mb5
          root=root[0]
          if type==0 or type==2:
-             third=inter.execTranspose(root,4)  #inter.execTranspose is function defined in the interpreter
+             third=inter.execTranspose(root,4)  #inter.execTranspose is a function defined in the interpreter
          else:
              third=inter.execTranspose(root,3)
 
@@ -135,23 +135,80 @@
           <<pattern + 'freq':generateChord({b6},3) 
           <<pattern + 'freq':generateChord({a6},1) 
       endfor
+
+#orchestra
+
+  instrument additive amp1 amp2 amp3 amp4 amp5 amp6 freq: a1 d1 a2 d2 a3 d3 a4 d4 a5 d5 a6 d6
+
+    env1=expseg(0.01, a1, 1, d1, 0.01)
+    env2=expseg(0.01, a2, 1, d2, 0.01)
+    env3=expseg(0.01, a3, 1, d3, 0.01)
+    env4=expseg(0.01, a4, 1, d4, 0.01)
+    env5=expseg(0.01, a5, 1, d5, 0.01)
+    env6=expseg(0.01, a6, 1, d6, 0.01)
+
+    fr=cpspch(freq)
+    a:s1=oscil(amp1,fr)
+    a:s2=oscil(amp2,fr*2)
+    a:s3=oscil(amp3,fr*4)
+    a:s4=oscil(amp4,fr*8)
+    a:s5=oscil(amp5,fr*16)
+    a:s6=oscil(amp6,fr*32)
+
+    out=env1*s1+env2*s2+env3*s3+env4*s4+env5*s5+env6*s6
+
+    <<out
+  endinstrument
+
+#score
+
+    additive:
+        pattern1=|4,16,/freq c8_ d f_ g__  a e_ f d_ z_/|
+        pattern2=|4,16,/freq c8 d f g  a e f d z_______/|
+        pattern3=|4,16,/freq d8_ c g_ f__  e a_ d f_ z_/|
+        pattern4=|4,16,/freq e8 f_ e_ g_ b   e_ g a_ g_ a/|
+        pattern5=|4,16,/freq a8_ g a_ g__  e b_ g e_ f_/|
+  
+        preset =/amp1 1/ + /a1 0.001/ + /d1 0.4/
+        preset +=/amp2 0.5/ + /a2 0.002/ + /d2 0.5/
+    
+
+        n=times/8
+
+        <<pattern1 * n + preset
+        <<pattern2 * n * 2
+        <<pattern3 * n * 3
+        <<pattern4 * n 
+        <<pattern5 * n
+
+        t=getTime()
+
+        var(0,t,'amp3',0.01,0.2)
+        var(0,t/2,'amp4',0.01,0.05)
+        var(t/2,t,'amp4',0.05,0.01)
+
 #orchestra
   
   instrument mixer
       >>gl,gr
       >>fml,fmr
       >>sctl,sctr
+      >>add
 
+    vol=linseg(0,0.1,1,p3-2.1,1,2,0)
     vFm=1
     pFm=0.4
     vg=1
     pg=0.4 + oscil(0.2,20/p3)
     vsct=1
     psct=0.6
+    vadd=0.4
+    x=p3/8
+    padd=linseg(0.1,x,0.9,x,0.1,x,0.9,x,0.1,x,0.9,x,0.1,x,0.9,x,0.5)
 
-    mr=vFm*pFm*fmr+vg*pg*gr+vsct*psct*sctr
-    ml=vFm*(1-pFm)*fml+vg*(1-pg)*gl+vsct*(1-psct)*sctl
-    outs(mr,ml)
+    mr=vFm*pFm*fmr+vg*pg*gr+vsct*psct*sctr+vadd*add*padd
+    ml=vFm*(1-pFm)*fml+vg*(1-pg)*gl+vsct*(1-psct)*sctl+vadd*add*(1-padd)
+    outs(mr*vol,ml*vol)
 
 endinstrument
 
@@ -163,7 +220,9 @@ endinstrument
     mixer[0]<<Granular
     mixer[1]<<Fm
     mixer[2]<<scanTable
+    mixer[3]<<additive
 
+//#end additive mixer
 //#end scanTable mixer
 //#end Fm mixer
 //#end(0,4)
