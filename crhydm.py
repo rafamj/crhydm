@@ -15,7 +15,7 @@ class Options:
     def asString(self):
         res= '<CsOptions>\n'
         res+=self.options
-        res+= '</CsOptions>\n'
+        res+= '\n</CsOptions>\n'
         return res
 
     def insert(self,o):
@@ -54,10 +54,10 @@ class InstrumentBase:
 
 class Instrument(InstrumentBase):
 
-    def __init__(self,n,par,pitchPar, midiPar, table,instr, mod_params):
+    def __init__(self,n,par,pitchPar, midiPar, table,instr, mod_params,inputs,outputs):
         InstrumentBase.__init__(self,n,par, pitchPar, midiPar)
-        self.zakOuts=[] # every element tuple with: (out,type,zak number)
-        self.inputs=[]
+        self.zakOuts=outputs # every element tuple with: (out,type,zak number)
+        self.inputs=inputs
         self.table=table #symbol table
         self.instr=instr # instructions
         self.mod_params=mod_params
@@ -76,11 +76,19 @@ class Instr(InstrumentBase):
         InstrumentBase.__init__(self,name,[],[],[])
         self.text=text
 
+class Opcode:
+    def __init__(self,name,text):
+        self.name=name
+        self.text=text
+        
+    def asString(self):
+        return 'opcode ' + self.name + self.text
 
 class Orchestra:
 
     def __init__(self):
         self.instruments=[]
+        self.opcodes=[]
         self.globalSection=[]
         self.globalFunctions=[]
         self.globalText=''
@@ -95,6 +103,9 @@ class Orchestra:
 
     def insertInstrument(self,instr):
         self.instruments.append(instr)
+
+    def insertOpcode(self,opcode):
+        self.opcodes.append(opcode)
 
     def getZak(self):
         return (self.zakNumbera+self.zakNumberk)>0
@@ -118,9 +129,10 @@ class Orchestra:
             if self.zakNumberk==0:
                 self.zakNumberk=1
             res+='zakinit ' + str(self.zakNumbera) +',' + str(self.zakNumberk) + '\n'
+        for opcode in self.opcodes:
+            res+=opcode.asString()
         for instrument in self.instruments:
             if  not instr or instrument.name in set(instr):
-                ##res+=instrument.asString(self.getZak())
                 res+=instrument.asString()
         res+= '</CsInstruments>\n'
         return res
@@ -133,7 +145,8 @@ class Score:
         self.list=[] 
         self.functions=[]
         self.tempo=[]
-
+        self.line=[] #this is a auxiliar variable, that can be examined inside a function
+         
     def  asString(self, instruments,t1,t2):
         res= '<CsScore>\n'
         for t in self.functions:
@@ -204,7 +217,7 @@ class Score:
                         segment.append(line[i])
                     i=i+1
                 if v2==-1: #v1 is a function
-                    self.applyFunction(instr,segment, [par] + v1)
+                    self.applyFunction(instr,segment, ['callLater',par] + [v1])
                 else:
                     self.applyVariations(instr,segment,[par,v1,v2])
 
@@ -285,7 +298,7 @@ class Score:
             return
         n=variation[0]
         if n=='callLater':
-            self.applyFunction(instr,l,variation[1])
+            self.applyFunction(instr,l,variation)
             return
         t0=0
         i=len(l)-1
@@ -344,10 +357,10 @@ class Score:
             t1=t2
 
     def applyFunction(self,instr,l,variation):
-        f=variation[3][0]
+        f=variation[2][2][0]
         if len(l)==0:
             return
-        n=variation[0]
+        n=variation[1]
         i=len(l)-1
         dur=0
         lastDur=float(l[i][1])
@@ -367,16 +380,18 @@ class Score:
                     p1=line[parN-1]
                     p2=t/(te+dur)
                     func="f('" + p1 + "'," + str(p2) + ","
-                    for p in variation[2]:
+                    for p in variation[2][1]:
                         func += str(p) + ','
                     func=func[:-1]
                     func+=')'
+                    self.line=line
                     line[parN-1]=eval(func)
         
     
     def applyValues(self,instr,lines,values):
         if len(lines)==0:
             return
+        values=copy.deepcopy(values)
         val=self.translateValues(instr,values)
         if val[0]==-1:
             fromTheEnd=True
@@ -407,22 +422,22 @@ class Score:
                     i=i+1
                     if i>=len(lines):
                         break 
-                
+    
+    def joinList(self,l):
+        if ',' in l:
+            r=self.joinList(l[0]) + self.joinList(l[2])
+            return r
+        else:
+            return [l]
+                    
     def translateValues(self,instr,l):
-        values=[]
-        newList=[]
         if l[0]==-1:
             fromTheEnd=True
             l.pop(0)
         else:
             fromTheEnd=False
-        for i in range(len(l)):
-            if l[i]==',':
-                values.append(newList)
-                newList=[]
-            else:
-                newList.append(l[i])
-        values.append(newList) 
+            
+        values=self.joinList(l)
         newValues=[]
         for v in values: # take care of the glissandi
             par=v[0]
@@ -583,6 +598,7 @@ class Pattern:
                             line[parN]=t[1]
                         else:
                             print('parameter '+t[0]+' not found')
+                            exit()
                 time+=duration
                 p=p[len(item):]
                 return p,time
@@ -641,14 +657,14 @@ class Pattern:
                 mainPat[np],t[np]=self.translateMain(line[np],mainPat[np],instr, t[np], legato,self.durations[parts[np]])
                 parts[np]+=1 #only verify parts in the main pattern
                 if mainPat[np]==None:
-                    print('error in pattern ',self.pattern[np])
+                    print('error 1 in pattern ',self.pattern[np])
                     exit()
                 #now, for every main pattern, add the secondary patterns
                 nnp=0
                 while nnp<len(pat):
                     line[np],pat[nnp][np]=self.translateMore(instr,line[np], pat[nnp][np])
                     if line[np] is None :
-                        print('error in pattern '+self.pattern[nnp][np]+' translation not found')
+                        print('error 2 in pattern '+self.pattern[nnp][np]+' translation not found')
                         exit()
                     nnp+=1
                 res[np].append(line[np])    
@@ -675,6 +691,9 @@ class Song:
 
     def insertInstrument(self,instr):
         self.orchestra.insertInstrument(instr)
+
+    def insertOpcode(self,opcode):
+        self.orchestra.insertOpcode(opcode)
 
     def insertGlobal(self,g):
         self.orchestra.insertGlobal(g)
@@ -731,9 +750,8 @@ class Song:
 
 class Interpreter:
     SEPARATORS=set([' ','\t'])
-    SPECIAL=set(['=', "'", '[', ']','<', '>','|','\n','*','/','-','+','(', ')','#',':',',','^','{','}','&','!','%',';'])
+    SPECIAL=set(['=', "'", '[', ']','<', '>','|','\n','*','/','-','+','(', ')','#',':',',','^','{','}','&','!','%',';','\\'])
     START=0
-    OPTIONS=1
     GLOBAL=2
     ORCHESTRA=3
     INSTRUMENT=4
@@ -749,14 +767,14 @@ class Interpreter:
         self.symbolTable['general']={}
         self.symbolTable['general']['dictionary']={}
         self.symbolTable['general']['orcFunction']={}
-        self.symbolTable['general']['scoFunction']={}
+        self.symbolTable['general']['scoFunction']={} 
         self.lineNumber=0
         self.charNumber=0
         self.line=''
         self.linePrint=''
         self.song=Song()
         self.initSignatures();
-        self.initScoreFunctions()
+        self.initScoreFunctions() ####
         self.include=''
         self.includeFile=''
         self.octave=0 #used in translatePitch
@@ -813,7 +831,7 @@ class Interpreter:
     def insertOrcFunction(self,key,value):
         self.symbolTable['general']['orcFunction'][key]=value #there are not local functions
 
-    def insertScoFunction(self,key,value):
+    def insertScoFunction(self,key,value): 
         self.symbolTable['general']['scoFunction'][key]=value #there are not local functions
 
     def getSymbol(self,key):
@@ -821,11 +839,14 @@ class Interpreter:
             l=key.split('.')
             if len(l)!=2:
                 self.print('error :'+key)
-            v=self.symbolTable[l[0]].get(l[1])
-            if v!=None:
-                return v[0],v[1]
-            else:
-                return ['','']
+            try:
+                v=self.symbolTable[l[0]].get(l[1])
+                if v!=None:
+                    return v[0],v[1]
+                else:
+                    return ['','']
+            except KeyError:
+                self.printError("Unknown identifier: " + l[0])
         else:
             v=self.symbolTable[self.env].get(key)
             if v!=None:
@@ -859,26 +880,32 @@ class Interpreter:
     def expectToken(self,v):
         value,t=self.nextToken()
         if t not in v:
-            self.printError('expected '+ str(v) + '. Read ' + value)
+            s=''
+            for e in v:
+                s += "'" +e + "' "
+            self.printError('expected '+ s + ". Read '" + value + "'")
         return value,t
 
 
     def extractPattern(self,patt,parts):
         pat=copy.deepcopy(patt)
-        pat,t=self.getValue(pat[1]) #quitar tipos
+        pat=self.getListValue(pat)
         param=pat.pop(0)
         param,t=self.getValue(param)
         trans=''
-        notes=[['string',param]]
+        notes=[param]
         j=0
         for i in range(len(pat)):
-            note=pat[i][0]
-            dur=pat[i][1]
+            pati,t=self.getValue(pat[i])
+            if len(pati)!=2:
+                self.printError('trying to extract pattern (it must be a pitch: parameter)')
+            note=pati[0]
+            dur=pati[1]
             if note=='0.00' or note ==-36:
                 trans+=SILENCE_CHAR
             else:
                 trans+=NOTE_CHAR
-                notes.append(['string',note])
+                notes.append(note)
             j+=1
             while dur>1:
                 trans+=PROL_CHAR
@@ -950,6 +977,11 @@ class Interpreter:
             ch=self.nextChar()
         if len(ch)==0:
             return 'eof','section'
+        elif ch=='\\':
+            tok,t=self.nextToken()
+            if tok!='\n':
+                self.printError('end of line expected after \\')
+            return self.nextToken()
         elif ch=="'" or ch=='"':
             return self.readString(ch),'string'
         elif ch in ['=','[',']','>','<','*','+','-','/','(',')',':',',','^','|','{','}','?','&','%']:
@@ -971,7 +1003,6 @@ class Interpreter:
         elif ch==';':
             t,s=self.readComment(ch)
             if t=='comment':
-            #    return self.readIdentifier(ch),'/identifier'
                 return '\n','\n'
         elif ch=='#':
                 tok,t=self.nextToken()
@@ -992,17 +1023,6 @@ class Interpreter:
             return self.readIdentifier(ch),'identifier'
         return None,'fail' ## 
 
-    def readSection(self):
-        res=''
-        ch=self.nextChar()
-        while ch!='#':
-            res +=ch
-            ch=self.nextChar()
-        self.unread(ch)        
-        return res
-
-    def readOptions(self):
-        return self.readSection()
 
     def readOrchestra(self):
         result=[]
@@ -1052,136 +1072,153 @@ class Interpreter:
                             if t=='l':
                                 t=''
                                 s=v
-                            if t=='A':
-                                t='k'
-
-                            if t=='boolean':
-                                t='i'
+                            t=self.printType(t)    
                             text += t + s 
         return text        
 
+    def printType(self,t):
+        if t=='A':
+            t='a'
+        if t=='B':
+            t='k'
+        if t=='boolean':
+            t='i'
+        return t
     
-    def determineTypeOfOutputs(self,name,par,instr):
-        returnParms=[]
-        for l in instr:
-            if l[0]=='<<': #output
-                p=[]
-                for i in l:
-                    if type(i)==list:
-                        t=i[1]
-                        pt=self.printSymbol(i[0],par,name)
-                    else:
-                        pt=self.printSymbol(i,par,name)
-                        t=''
-                    if pt!=' ' and pt!=',' and pt!='(' and pt!=')':
-                        p.append([pt,t,-1])
-                p.pop(0)
-                returnParms.append(p)
-        return returnParms
-
-    def determineTypeOfInputs(self, instr):
-        inputs=[]
-        for l in instr:
-            if l[0]=='>>': #zak input
-                insOrigin=l[1]
-                if len(insOrigin)==0: #no instrument as origin
-                    inputs.append([])
-                    continue
-                nz=insOrigin[1] #number of output
-                insOrigin=insOrigin[0]
-                ty,instrO=self.getSymbol(insOrigin)[1]
-                inpt=[instrO]
-                n=0
-                i=3
-                while i<len(l):
-                    item=l[i]
-                    if item!=',':
-                        if nz>=len(instrO.zakOuts):
-                            self.printError("instrument output not found:" + instrO.name +'['+str(nz)+']')
-                        t=instrO.zakOuts[nz][n][1] #it must be a or k
-                        inp=[]
-                        if instrO.zakOuts[nz][n][2]!=-1:
-                            num=instrO.zakOuts[nz][n][2]
-                        else:
-                            num=self.song.getZakNumber(t)
-                            instrO.zakOuts[nz][n]=(instrO.zakOuts[nz][n][0],t,num)
-                        inp.append(nz) #number of output
-                        inp.append(n) #number of channel within the output
-                        inp.append(t) #type of channel within the output
-                        inp.append(num) #zak number
-                        n+=1
-                        inpt.append(inp)
-                    i+=1
-                inputs.append(inpt)
-        return inputs
-
     def printInstrument(self,instrument,par,instr):
-        zak=self.song.getZak()
+        zak=self.song.getZak()#####
         name=instrument.name
         text=''
         nInput=0
+        inputsAtoClear=[]
+        inputsKtoClear=[]
         for l in instr:
             if l[0]=='<<': #output
                 if zak:
-                    for out in instrument.zakOuts:
-                        for o in out:
+                    #for out in instrument.zakOuts:
+                    out=l[1:]
+                    for o in out:
+                        if o!=',':
                             if o[2]!=-1:
-                                text +='z' + o[1] +'wm('+ o[0] + ',' + str(o[2]) + ')\n'
+                                text +='z' + self.printType(o[1]) +'wm('+ self.printSymbol(o[0],par,name) + ',' + str(o[2]) + ')\n'
                             else:
-                                print('//output ' + o[0][1:] + ' in ' + instrument.name + ' not connected')
+                                print(';;output ' + self.printSymbol(o[0],par,name) + ' in ' + instrument.name + ' not connected')
                                 #exit()
 
-                else:    
-                    l=len(instrument.zakOuts)
-                    if l==0:
-                        ret=''
-                    elif l==1:
-                        ret='out('+instrument.zakOuts[0][0]+')\n'
-                    elif l==2:
-                        ret='outs('+instrument.zakOuts[0][0]+','+instrument.zakOuts[1][0]+')\n'
-                    else:
-                        print('error in output instruction') ####
-                        exit()
-
-                    
-                continue
+                else:    #instrument no connected. #########
+                    self.printError('instrument ' + instrument.name + ' not connected')
+                    for out in instrument.zakOuts:
+                        l=len(out)
+                        if l==0:
+                            ret=''
+                        elif l==1:
+                            ret='out('+self.printSymbol(out[0][0],par,name)+')\n'
+                        elif l==2:
+                            ret='outs('+self.printSymbol(out[0][0],par,name)+','+self.printSymbol(out[1][0],par,name)+')\n'
+                        else:
+                            print('error in output instruction') ####
+                            exit()
+                        text +=ret  
             elif l[0]=='>>': #zak input
                 l.pop(0)
-                insOrigin=l[1]
-                item=l.pop(0)
-                item=l.pop(0) #there are only the variables left
-                #if insOrigin=='\n': #not connected
-                #    print('pr',name,nInput,instrument.inputs)
-                if len(instrument.inputs[nInput])==0: #not connected
-                    for item in l:
-                        if item!=',':
-                            text += self.printSymbol(item,par,name)
-                            text +='=0\n' #put the input to 0
-                            print('//input ' +  item + ' in ' + instrument.name + ' not connected. Set to 0')
-                else:
+                insOrigin=l.pop(0)
+                l.pop(0) # pop the '>>'
+                if insOrigin!=[]:#connected to a variable or an instrument
+                    nOutput=int(insOrigin[1])
+                    insOrigin=insOrigin[0]
+                    if len(instrument.inputs[nInput])!=0:
+                        no=0
+                        for item in l:
+                            if item!=',':
+                                if self.isInstrument(insOrigin): #instrument
+                                    t,i=self.getSymbol(insOrigin)
+                                    s=self.printSymbol(item,par,name)
+                                    t=s[0]
+                                    o=i[1].zakOuts[nOutput][no]
+                                    if o[2]==-1:
+                                        print(';;output ' +  self.printSymbol(o[0],par,name) + ' in ' + insOrigin + ' not connected.')
+                                    else:
+                                        text += s
+                                        text +='=z' + t +'r('
+                                        text += str(o[2])
+                                        text +=')\n'
+                                        if t=='a':
+                                            inputsAtoClear.append(str(o[2]))
+                                        else:
+                                            inputsKtoClear.append(str(o[2]))
+                                else:                               #variable, expression? no
+                                    if not insOrigin.isnumeric():
+                                        t1,v=self.getSymbol(insOrigin) #is defined?
+                                        if t1=='':
+                                            self.printError('variable ' + insOrigin + ' not defined')
+                                    s=self.printSymbol(item,par,name)
+                                    t=s[0]
+                                    text += s
+                                    text +='=z' + t +'r('
+                                    text += self.printSymbol(insOrigin,par,name)
+                                    text +=')\n'
+                                    if t=='a':
+                                        inputsAtoClear.append(str(self.printSymbol(insOrigin,par,name)))
+                                    else:
+                                        inputsKtoClear.append(str(self.printSymbol(insOrigin,par,name)))
+
+                                no=no+1
+                    elif len(instrument.inputs[nInput])==0: #not connected
+                        for item in l:
+                            if item!=',':
+                                text += self.printSymbol(item,par,name)
+                                text +='=0\n' #put the input to 0
+                                print(';;input ' +  item + ' in ' + instrument.name + ' not connected. Set to 0')
+                else: #input not connected
                     n=0
                     for item in l:
                         if item!=',':
-                            t=instrument.inputs[nInput][n+1][2]
-                            zn=instrument.inputs[nInput][n+1][3] 
-                            text+=t + item + '=z' + t +'r('+  str(zn) + ')\n'
-                            text+='z' + t + 'cl('+ str(zn) + ',' + str(zn) + ')\n'
-                            #print('//input ' +  item + ' in ' + instrument.name + ' not connected. Set to 0')
-                            n+=1
+                            if len(instrument.inputs[nInput])!=0:
+                                if len(instrument.inputs[nInput])>n+1:
+                                    t=instrument.inputs[nInput][n+1][2]
+                                    t=self.printType(t)
+                                    zn=instrument.inputs[nInput][n+1][3] 
+                                    text+=t + item + '=z' + t +'r('+  str(zn) + ')\n'
+                                    #print('//input ' +  item + ' in ' + instrument.name + ' not connected. Set to 0')
+                                    if t=='a':
+                                        inputsAtoClear.append(str(zn))
+                                    else:
+                                        inputsKtoClear.append(str(zn))
+                                    n+=1
+                                else: #not enough outputs to feed the inputs
+                                    self.printError('In instrument '+ name + ', input ' + str(nInput) + ', there are too many variables at the right of >>')
                 nInput+=1
-                        
-                continue
-            t,v=self.getSymbol(l[0])
-            if len(l)>1 and (self.oldStyle(l[-1][0]) or  l[1]==',' or v=='multi'): #complicated and prone to error
-                l[-2]=' '         # delete the = sign and the parenthesis
-                l[-1][1]=' '
-                l[-1][-1]=' '
-            #print(l)
-            #if l[1]=='=' #revise the types#####
-            for i in l:
-                text += self.printSymbol(i,par,name)
-            text +='\n'
+                if nInput>=len(instrument.inputs): #last input has been written
+                    inputsAtoClear=sorted(set(inputsAtoClear))
+                    inputsKtoClear=sorted(set(inputsKtoClear))
+                    text+=self.printCl(inputsAtoClear,'a')
+                    text+=self.printCl(inputsKtoClear,'k')
+            else: # normal instruction
+                t,v=self.getSymbol(l[0])
+                if len(l)>1 and (self.oldStyle(l[-1][0]) or  l[1]==',' or v=='multi'): #complicated and prone to error
+                    l[-2]=' '         # delete the = sign and the parenthesis
+                    l[-1][1]=' '
+                    l[-1][-1]=' '
+                for i in l:
+                    text += self.printSymbol(i,par,name)
+                text +='\n'
         text += 'endin\n\n'    
+        return text
+
+    def printCl(self,z,t):
+        if len(z)==0:
+            return ''
+        text=''
+        pairs=[[z[0],z[0]]]
+        i=0
+        for zc in z:
+            if zc.isnumeric() and int(zc)<=int(pairs[i][1])+1:
+                     pairs[i][1]=zc
+            else:
+                i=i+1
+                pairs.append([zc,zc])
+        for zn in pairs:
+            text+='z' + t + 'cl('+ zn[0] + ',' + zn[1] + ')\n'
         return text
 
     def oldStyle(self, f):
@@ -1209,12 +1246,9 @@ class Interpreter:
             if instrument.name==name:
                 instrument.name=newName
                 instrument.params=['p1','p2','p3'] + parameters
-                #print('insertando',newName,[newName,instrument])
                 self.insertSymbol(newName,'instrument',[newName,instrument])
                 self.symbolTable[newName]={}
                 self.symbolTable[newName]['dictionary']={}
-                #self.insertSymbol(name,'deleted',None)
-                #self.symbolTable[name]=None
                 self.cleanSymbolTable(name)
                 return
         return
@@ -1231,8 +1265,8 @@ class Interpreter:
             self.unread('#')    
             return 0
         if token=='instrument':
-            name,parameters,par,pitchPar,midiPar,table,instr=self.readInstrumentText() #par is like parameters but with some of then anulled
-            i=Instrument(name,parameters,pitchPar,midiPar,table,instr,par)
+            name,parameters,par,pitchPar,midiPar,table,instr,inputs,outputs=self.readInstrumentText() #par is like parameters but with some of then anulled
+            i=Instrument(name,parameters,pitchPar,midiPar,table,instr,par,inputs,outputs)
             self.insertSymbol(name,'instrument',[name,i])
             self.song.insertInstrument(i)
             return ''
@@ -1242,8 +1276,24 @@ class Interpreter:
             self.insertSymbol(name,'instrument',[name,i])
             self.song.insertInstrument(i)
             return ''
+        if token=='opcode':
+            name,outTypes,inTypes,text=self.readOpcodeText() 
+            o=Opcode(name,', '+outTypes+', '+inTypes+'\n'+text+'\n')
+            outTypes,inTypes=self.translateTypes(outTypes,inTypes)
+            self.insertOrcFunction(name,[outTypes,inTypes])
+            self.song.insertOpcode(o)
+            return ''
         if token=='rename':
             self.renameInstrument()
+            return ''
+        if token=='reserveZak':
+            self.expectToken(['('])
+            valuea,t=self.readExpression()
+            self.expectToken([','])
+            valuek,t=self.readExpression() # t is integer??
+            self.expectToken([')'])
+            self.song.orchestra.zakNumbera=int(valuea) 
+            self.song.orchestra.zakNumberk=int(valuek)
             return ''
         if token=='\n':
             return ''
@@ -1271,20 +1321,22 @@ class Interpreter:
             result.append('=')
             #self.insertSymbol(var,t,'')
             result.append(value)
-            if False and t=='ftgen':
-                i=0
-                while result[i]!='=':
-                    if result[i]!=' ,':
-                        self.insertSymbol(var,'gi',result[i]) 
-                        text = result[i] + ' ftgen ' + result[-1]
-                        t=Table(text)
-                        self.song.insertTable(t,'global')
-                        i=i+1
-                return ''
         else:
             self.printError("Syntax error. Assignation or call to function expected")
         return result    
 
+    def translateTypes(self,outTypes,inTypes):
+        rin=inTypes
+        rout=outTypes
+        rin=rin.replace('j','i')
+        rin=rin.replace('K','k')
+        rin=rin.replace('o','i')
+        rin=rin.replace('p','i')
+        rin=rin.replace('S','i')
+        rout=rout.replace('K','k')
+        
+        return rout,rin
+        
     
     def readInstrumentLine(self,name):
         token,t=self.nextToken()
@@ -1295,7 +1347,7 @@ class Interpreter:
             
         if token=='\n':
             return ''
-        if t=='<<':
+        if t=='<<':    #zak output with nothing to the left
             result=['<<'] #use this for marking the output
             value,tv=self.readExpression()
             result.append([value,tv])
@@ -1344,11 +1396,18 @@ class Interpreter:
                     self.unread(tok)
                 result=[token]     
                 token,t=self.nextToken()
-        elif t=='>>': #input from zak system
+        elif t=='>>': #input from zak system, with nothing to the left
             result= ['>>', [] ]   #put <= in front in order to mark the input
             result.append('>>')
             result.extend(self.readCommaSeparatedList())
             return result
+        elif t=='number':
+            tok,t=self.nextToken()
+            if t=='>>': #input from number
+                result= ['>>', [token, 0] ]   #put <= in front in order to mark the input
+                result.append('>>')
+                result.extend(self.readCommaSeparatedList())
+                return result
         else:
             self.printError("identifier or '<<' expected")
 
@@ -1357,7 +1416,6 @@ class Interpreter:
             result.append(',')
             result.append(token)
             token,t=self.nextToken()
-
         if token=='=':  #variable declaration or assignation
             value,t=self.readExpression()
             #print(value,t)
@@ -1379,21 +1437,12 @@ class Interpreter:
                 return ''
             result.append('=')
             result.append(value)
-            if False and t=='ftgen':
-                i=0
-                while result[i]!='=':
-                    if result[i]!=' ,':
-                        self.insertSymbol(var,'gi'+name + '_' ,result[i]) 
-                        text = name + '_' + result[i] + ' ftgen ' + result[-1]
-                        t=Table(text)
-                        self.song.insertTable(t,'global')
-                        i=i+1
-                return ''
         elif token=='>>':  #input from zak system
             if len(result)>1:
-                self.printError("Input must be unique")
-            result.append(0) 
-            result= ['>>', result] #put <= in front in order to mark the input
+                self.printError("only one element for input is allowed") #for the moment?
+            result.append(0) #it can be an instrument or a parameter, 0 in case it is an instrument
+            result= ['>>',result] #put <= in front in order to mark the input
+
             result.append('>>')
             result.extend(self.readCommaSeparatedList())
         elif token=='(':  #call to instrument that doesn't return value
@@ -1413,13 +1462,12 @@ class Interpreter:
                 result.append('=') #the same that with '='
                 val,t=self.readExpression()
                 t1,v=self.getSymbol(token1)
-                if t=='A':
-                    t='k'
+                t=self.printType(t)
                 self.insertSymbol(token1,t,'multi')
                 result.append(val)
             elif t=='>>':  #input from zak system
                 result.append(value)
-                result= ['>>'] +result#put <= in front in order to identify the input
+                result= ['>>' ,result]#put <= in front in order to identify the input
                 result.append('>>')
                 result.extend(self.readCommaSeparatedList())
         else:
@@ -1455,16 +1503,25 @@ class Interpreter:
         glissPar=[]
         pitchPar=[]
         midiPar=[]
+        inputs=[]
+        outputs=[]
         p,t1=self.nextToken()
         if p=='=':
             n,t=self.nextToken()
             t,v=self.getSymbol(n) 
-            i=v[1]
-            par = copy.deepcopy(i.params[3:])
-            mod_params=copy.deepcopy(i.mod_params)
-            pitchPar=copy.deepcopy(i.pitchPar)
-            midiPar=copy.deepcopy(i.midiPar)
-            table=copy.deepcopy(i.table)
+            i=copy.deepcopy(v[1])
+            par = i.params[3:]
+            mod_params=i.mod_params
+            pitchPar=i.pitchPar
+            midiPar=i.midiPar
+            table=i.table
+            inputs=i.inputs
+            zakOuts=i.zakOuts
+            #get new zakOuts
+            for o in zakOuts:  #new zak  number for every output
+                for out in o:
+                    t=self.printType(out[1])
+                    out[2]=self.song.getZakNumber(t)
             tok,t=self.nextToken()
             if tok=='(':
                 while tok!=')':
@@ -1476,7 +1533,7 @@ class Interpreter:
                     mod_params.remove(n)
                     table[n]=['l',nn] #literal
                     tok,t=self.expectToken([')',','])
-            return name, par, mod_params, pitchPar, midiPar,table, i.instr
+            return name, par, mod_params, pitchPar, midiPar,table, i.instr, inputs, zakOuts
         else:
             while p!='\n':
                 if p=='+': #glissable parameter
@@ -1498,27 +1555,47 @@ class Interpreter:
         for p in par:
             self.insertSymbol(p,'i','p'+str(i))
             i=i+1
+        for p in pitchPar:
+            if p not in glissPar:
+                n=par.index(p)
+                line=[p , '=', 'cpspch' , '(', 'p' + str(n+4)  ,')']
+                instr.append(line)
+                par[n]='__deleted_parameter'
         for p in glissPar:
             self.insertSymbol(p + '_next','i','p'+str(i))
             n=par.index(p)
             self.insertSymbol(p,'k','') #from now on the meaning of this parameter is redefined below
             parameters.append(p + '_next')
             par[n]='__deleted_parameter'
-            line=[p , '=', 'line' , '(', 'p' + str(n+4) , ',', 'abs(p3)', ',' , 'p' + str(i) ,')']
+            if p in pitchPar:
+                line=[p , '=', 'line' , '(', 'cpspch' , '(','p' + str(n+4) ,')', ',', 'abs(p3)', ',' ,'cpspch' , '(', 'p' + str(i) ,')',')']
+            else:
+                line=[p , '=', 'line' , '(', 'p' + str(n+4) , ',', 'abs(p3)', ',' , 'p' + str(i) ,')']
             instr.append(line)
             i=i+1
         line=self.readInstrumentLine(name)
         while line!=0:
             if len(line)>0:
                 instr.append(line)
+                if line[0]=='>>':
+                    inputs.append(line[1])
+                elif line[0]=='<<':  ####revisar cuando se asigne la salida
+                    ou=[]
+                    for o in line:
+                        if o!='<<' and o!=',':
+                            t=self.printType(o[1])
+                            n=self.song.getZakNumber(t)
+                            o.append(n) #new zak number for every output
+                            ou.append(o)
+                            outputs.append(ou)
             line=self.readInstrumentLine(name)
         table=self.symbolTable['local']
         self.cleanSymbolTable('local')
         self.env='general'
-        return name, parameters, par, pitchPar, midiPar, table, instr
+        return name, parameters, par, pitchPar, midiPar, table, instr, inputs, outputs
 
-    def isEndin(self,line):
-        n=line.find('endin')  ###
+    def isEndin(self,line,end):
+        n=line.find(end)  ###
         return n!=-1
 
     def readInstrText(self):
@@ -1528,7 +1605,7 @@ class Interpreter:
         text=''
         self.readLine()
         line=self.line
-        while not self.isEndin(line):
+        while not self.isEndin(line,'endin'):
             text +=line
             self.readLine()
             line=self.line
@@ -1537,6 +1614,28 @@ class Interpreter:
         return name,text    
 
 
+    def readOpcodeText(self):
+        name,t1=self.nextToken()
+        self.expectToken([','])
+        outTypes,t1=self.nextToken()
+        self.expectToken([','])
+        inTypes,t1=self.nextToken()
+        r,s=self.searchFunctionSignature(name)
+        if not (r=='' and s==''):
+            self.printError('opcode already defined '+ name)
+        text=''
+        self.readLine()
+        line=self.line
+        while not self.isEndin(line,'endop'):
+            text +=line
+            self.readLine()
+            line=self.line
+        text +=line
+        self.readLine()
+        
+        return name,outTypes,inTypes,text    
+
+    
     def coerce(self,t1,t2):
         if t1[0]=='g':
             t1=t1[1:]
@@ -1556,9 +1655,16 @@ class Interpreter:
                 return 'k'
         if t1=='a':
             return 'a'
-        if t1=='A': # a or k
+        if t1=='A': 
             if t2=='i':
-                return 'k'
+                return 'A'
+            elif t2=='k':
+                return 'A'
+            else:
+                return t2
+        if t1=='B': 
+            if t2=='i':
+                return 'B'
             else:
                 return t2
 
@@ -1575,38 +1681,64 @@ class Interpreter:
         
         
     def createVarlist(self,v1,t1,v2,t2,isPattern=False):
-        if t1 == 'list':
+        #v1 is always of type string
+        if True or t1 == 'string':
              if t2 in ['call','callLater']: #####
                  if isPattern:
-                     v2,t2=self.callFunction(v2[0],v2[1])
+                     v2,t2=self.callFunction(v2[0],v2[1]) ##getValue???
                  else:
-                     return ['callLater',v1+v2],'callLater'
+                     v1,t1=self.getValue(v1)
+                     return ['callLater',v1 , v2],'callLater'
              if t2 in ['list'] :
-                 return ['listVar',v1+v2],'listVar'
+                 if v1[0][0]=='identifier':  #why not call getValue???
+                     #v1,t1=self.getValue(v1[0])
+                     v1=[[t1,v1]]
+                 for i in range(len(v2[1])):
+                     e,t=self.getValue(v2[1][i])
+                     v2[1][i]=[t,e]
+                 res=['listVar', [[t1,v1]] + v2[1]]
+                 return res,'listVar'
              if t2 in ['listPitch','listMidi']:
+                 #v2,t=self.getValue(v2)
                  if not isPattern:
                      r=[]
+                     v2=self.getListValue(v2) #the first element must be 'list...'
                      for e in v2:
+                     #    e,t=self.getValue(e)
                          r.append(e[0])
-                     v2=r    
-                 return ['listVar',v1+v2],'listVar'
+                     v2=r     
+                 else:
+                     v2=v2[1]
+                 #v2=v2[1][0]
+                 res=['listVar',[[t1,v1]] + v2]
+                 return res,'listVar'
              if t2 in ['string']:
-                 v2=v2.split()
-                 m=self.isParMidi(v1[0])
-                 if self.isParPitch(v1[0]) or m:
-                     r=[]
+                 v2=v2.replace('>',' > ').split()
+                 v1,t=self.getValue(v1)
+                 m=self.isParMidi(v1)
+                 if self.isParPitch(v1) or m:
+                     r=[[t1,v1]]
                      for e in v2:
                          p,d=self.translatePitch(e)
                          if m:
                              p=self.pitchToMidi(p)
                          if isPattern:    
-                             r.append([p,d])
+                             r.append(['list',[['string',p],['number',d]]]) ##['list'... ???
                          else:
-                             r.append(p)
+                             r.append(['string',p])
                  else:
-                     r=v2
-                 return ['listVar',v1+r],'listVar'
-        self.printError('types '+t1+' and '+t2+" can't be added")
+                     r=[[t1,v1]]
+                     for e in v2:
+                         r.append(['string',e])
+                 #v1=['list',v1]
+                 res=['listVar',r]
+                 return res,'listVar'
+             if t2 in ['number']:
+                 v1,t1=self.getValue(v1)
+                 res=['listVar',[[t1,v1],[t2,v2]]]
+                 return res,'listVar'
+        self.printError('types '+t1+' and '+t2+" can't be joined")
+    
     
     def sumValues(self,v1,t1,v2,t2):
         if t1=='number':
@@ -1635,7 +1767,7 @@ class Interpreter:
                 return v1,'pattern'
             elif t2=='listVar':
                 p=copy.deepcopy(v1)
-                v2,t=self.getValue(v2,True)
+                v2=self.getListValue(v2) #listVar[0] is 'listVar'
                 p.append(v2)
                 p.extend('.')
                 return p,'pattern'
@@ -1643,15 +1775,18 @@ class Interpreter:
              if t2==t1:
                  return v1+v2,t1
         elif t1=='listVar':
+             #v1,t1=self.getValue(v1)
+             
              if t2=='listVar': #if the lists are of the same parameter, they are concatenated
-                if v1[1][0]==v2[1][0]:
-                    #aux=v1[1]
-                    #aux.append(',')
-                    #v2.pop(0)
-                    return ['listVar', v1[1] + v2[1][1:]] , 'listVar'
+                #v1,t1=self.getValue(v1)
+                #v2,t2=self.getValue(v2)
+                if False and v1[0][1]==v2[0][1]:
+                    return v1 + v2[1:] , 'listVar'
                 else:
-                    return ['listVar', v1[1] + [','] + v2[1]],'listVar'
+                    res= ['listVar'] + [[v1] +  [[ 'string',',']] +  [v2]]
+                    return res,'listVar'
         self.printError('types '+t1+' and '+t2+" can't be added")
+
 
     def sum(self,v1,t1,v2,t2):
         if self.state==self.ORCHESTRA:
@@ -1679,7 +1814,7 @@ class Interpreter:
         else:
             return ['-',v1,v2],''
       
-    def addVariation(self,v1,v2):  
+    def addVariation(self,v1,v2):  #####
        if len(v2)!=3:
            self.printError('error. Variations must have 3 parameters')
            v1.append(v2)
@@ -1728,7 +1863,8 @@ class Interpreter:
             if t2=='number':
                 return self.multiplyPattern(v1,v2),'pattern'
             if t2=='listVar':
-                v2,t=self.getValue(v2,True)
+                v1,t=self.getValue(v1)
+                v2=self.getListValue(v2)
                 v1.append(v2)
                 v1.extend('*')
                 return v1,'pattern'
@@ -1741,10 +1877,13 @@ class Interpreter:
                 return v1*int(v2),'string'
         elif t1 in ['list','listPitch','listMidi']:
             if t2=='number':
-                return int(v2)*v1,t1
+                res=[v1[0],v1[1]*int(v2)]
+                return res,t1
         elif t1 == 'listVar':
             if t2=='number':
-                return [v1[0] , [v1[1][0]] +  v1[1][1:]*int(v2)],'listVar'
+                v1,t=self.getValue(v1)
+                res= [v1[0]]+ v1[1:]*int(v2)
+                return res,'listVar'
         self.printError('types '+t1+' and '+t2+" can't be multiplied")
 
     def multiply(self,v1,t1,v2,t2):
@@ -1855,10 +1994,10 @@ class Interpreter:
             r,s=self.searchFunctionSignature(value)
             if(r!='' or s!=''):
                 return
-            if t=='A' and (pt=='x' or pt=='k'):
+            if (t=='A' or t=='B') and (pt=='x' or pt=='k'): ####revise
                  t='k'
                  self.insertSymbol(value,t,'')
-            elif t=='A' and (pt=='x' or pt=='a'):
+            elif (t=='A' or t=='B') and (pt=='x' or pt=='a'):
                  t='a'
                  self.insertSymbol(value,t,'')
 
@@ -1942,6 +2081,7 @@ class Interpreter:
         t=self.peekNextChar() 
         while t!=']':
             value,t=self.readExpression()
+            #key=self.generateVar(value,t)
             l.append(value)
             value,t=self.expectToken([',',']'])
         return l,'list'
@@ -1955,7 +2095,7 @@ class Interpreter:
             value +=ch
         while t!='}':
             value,d=self.translatePitch(value)
-            l.append(['list',[['string',value],['number',d]]])
+            l.append(['list', [['string',value],['number',d]]])
             value,t=self.expectToken([',','}'])
             if t!='}':
                 value,t=self.nextToken() 
@@ -1963,7 +2103,7 @@ class Interpreter:
                 if ch in ['+','-']:
                     self.expectToken([ch])
                     value +=ch
-        return l,'listPitch'
+        return l,'listPitch' #no ['listPitch', l], because readValue adds the type
                 
     def readListMidi(self):
         l=[]
@@ -2087,6 +2227,7 @@ class Interpreter:
         return octave + '.' + v, duration
 
     def readVarlist(self):
+        t=[]
         token=''
         ch=self.nextChar()
         while ch !='/':
@@ -2094,14 +2235,22 @@ class Interpreter:
             ch=self.nextChar()
             if len(ch)==0:
                 return None
+            if ch==',':
+                t.append(token)
+                token=''
+                ch=self.nextChar()
+        t.append(token)
+        token=t.pop(0)
         l=token.split()
         par=l.pop(0)
-        res= ['++',['list',[['string',par]]], ['string', ' '.join(l)]] #++ means createVarlist
-        return res,''
+        res=['++',['string', par] , ['string', ' '.join(l)]] #the name of the parameter is in a list
+        for token in t:        
+            l=token.split()
+            par=l.pop(0)
+            res=['+',res,['++',['string',par], ['string', ' '.join(l)]]] #++ means createVarlist
+        return res,'' #no type, because is an expression
 
-
-
-
+        
     def readValueScore(self): # number | string | pattern | ( expr )
         value,t=self.nextToken()
         if t=='number':
@@ -2111,7 +2260,7 @@ class Interpreter:
                 return int(value),t
         elif t=='-':
             value,t=self.readValueScore()
-            return ['*',[t,value] ,['number',-1]],''  
+            return ['number', -1 * value],''  
         elif t=='string':
             return value,t
         elif t=='pattern':
@@ -2131,30 +2280,13 @@ class Interpreter:
                   else:
                       v1,t1=self.nextToken()
                 if value=='ftgen':
-                    return [value, par],'ftgen'
+                    return  [value,par],'ftgen'
                 elif value=='var':
                     return [value, par],'var' 
                 elif value=='put':
                     return [value, par],'put' 
                 else:
-                    if value=='eval':
-                        v,t=self.getValue(par[0])
-                        if t=='string':
-                            self.line=v+self.line
-                            return self.readValueScore()
-                        else:
-                            self.printError('eval argument must be a string')
-                    else:
-                        return [value, par],'call'
-            elif v1=='[': # list element
-                value=['index',[t,value]]
-                while v1=='[':
-                    self.expectToken(['['])
-                    vi,ti=self.readExpression()    
-                    self.expectToken([']'])
-                    value.append(vi)
-                    v1=self.peekNextChar()
-                return value,''
+                    return [value, par],'call'
             else: #variable
                 return value,t
         elif t=='|':
@@ -2179,12 +2311,10 @@ class Interpreter:
             self.printError('unexpected char '+value)
             return '','nothing'
 
-    def readPair(self):
+    def readComplexValue(self):
         v1,t1=self.readValueScore()
         c=self.peekNextChar()
-        if c!=':':
-            return v1,t1
-        else:
+        if c==':':                    #listVar
             self.expectToken([':'])
             c=self.peekNextChar()
             if c==':':
@@ -2192,17 +2322,36 @@ class Interpreter:
             v2,t2=self.readValueScore()
             if c==':' and t2=='call':
                 t2='callLater'
-            if t2!='':
-                v2=[t2,v2]
-            res= ['++',['list',[[t1,v1]]], v2] #++ means createVarlist
+            #if t2!='':
+            #    v2=[t2,v2]
+            if t2 in ['listMidi','listVar']: ##???
+                res= ['++',[t1,v1],v2[0]] #++ means createVarlist
+            elif t2=='identifier':
+                res= ['++',[t1,v1],[t2,v2]]
+            elif t2=='':
+                res= ['++',[t1,v1],v2]
+            else:
+                res= ['++',[t1,v1], [t2,v2]]
+            ####the first element (the par name) is always a list [type, name]
             return  res,''
+        elif c=='[': #list element
+            var=[t1,v1]
+            while c=='[':
+                self.expectToken(['['])
+                v,t=self.readList()
+                for i in v:
+                    var=['index',var]+ [i]
+                c=self.peekNextChar()
+            return var,'' #it's an operation
+        else:  #normal value
+             return v1,t1
         
         
     def readValue(self): # number | string | pattern | ( expr )
         if self.state==self.ORCHESTRA:
             return self.readValueOrchestra()
         else:
-            v,t=self.readPair()
+            v,t=self.readComplexValue()
             if t=='':
                 return v,''
             else:
@@ -2231,10 +2380,7 @@ class Interpreter:
         return ['>',key,value]
 
     def insertPattern(self,value,t):
-        for i in range(len(value)):
-            if type(value[i])==list:
-                value[i]=self.getListValue(value[i])
-                
+        #value=self.getListValue(value)
         instr=self.getSymbol(self.env)
         if t=='pattern':
             for p in value:
@@ -2364,9 +2510,15 @@ class Interpreter:
         name,t=self.nextToken()
         instructions='def ' + name
         stop=False
+        stopPars=False
+        pars=''
         while not stop:
             c=self.nextChar()
-            if c=='e': # enddefine?
+            if not stopPars:
+                pars +=c
+            if c==')':
+                stopPars=True
+            if stopPars and c=='e': # enddefine?
                k=c
                i=0
                while i <len('enddefine') and k[i]=='enddefine'[i]:
@@ -2379,7 +2531,7 @@ class Interpreter:
                    instructions+=k
             else:
                 instructions+=c
-        return ['define',name, instructions,retval] 
+        return ['define',name, instructions,retval,len(pars[1:-1].replace(',',' ').split())] 
 
     
     def readScore(self):
@@ -2398,38 +2550,39 @@ class Interpreter:
         self.charNumber=-1
         for instr in instructions:
             self.lineNumber=instr[0]
-            if instr[1]=='=':
-                v,t=self.getValue(instr[3]) #en la lista debe preservar los tipos
+            if instr[1]=='=':#assignation
+                right_value,t=self.getValue(instr[3]) #en la lista debe preservar los tipos
                 if instr[2][0]=='index': #list element
                     var=instr[2][1][1]
                     varValue,tv=self.getValue(instr[2][1])
-                    vv=varValue
                     n=2
-                    while n<len(instr[2])-1:
-                        index,ti=self.getValue(instr[2][n])
-                        vv=vv[int(index)][1]
-                        n+=1
                     index,ti=self.getValue(instr[2][n])
-                    vv[int(index)]=[t,v]
+                    if t in  ['list','listVar','listMidi','listPitch']:
+                        varValue[1][int(index)]=right_value #varValue[0] is the type
+                    else:
+                        varValue[1][int(index)]=[t,right_value]
                     self.insertSymbol(var,tv,varValue)
                 else:                    #variable
                     if t=='ftgen':
-                        v1=self.getListValue(v[0][1])
+                        #don't call getListValue to get the values
+                        #because we have to process the strings
                         r=instr[2][1]
+                        v1=right_value[0][1]
                         for i in range(len(v1)):
-                            if v[0][1][i][0]=='string':
-                                r += ' "' + v1[i] + '"'
+                            v,t=self.getValue(v1[i])
+                            if t=='string':
+                                r += ' "' + v+ '"'
                             else:
-                                r += ' ' +str(v1[i]) 
+                                r += ' ' +str(v) 
                         self.song.insertScoreFunction(r)
                     else:
-                        self.insertSymbol(instr[2][1],t,v)
+                        self.insertSymbol(instr[2][1],t,right_value)
             elif instr[1] in ['+=','-=','*=','/=','^=']:
                 op=instr[1][0]
                 self.execInstructions([[instr[0],'=',instr[2],[op,instr[2],instr[3]]]])
             elif instr[1]=='<<':
                 v,t=self.getValue(instr[2])
-                p=copy.deepcopy(v) 
+                p=copy.deepcopy(v)
                 self.insertPattern(p,t)
             elif instr[1]=='>':
                 value,t=self.getValue(instr[3])
@@ -2468,6 +2621,8 @@ class Interpreter:
                     if instr[2][1][3][0]=='call':
                         instr[2][1][3][0]='callLater'
                         func,t=self.getValue(instr[2][1][3])
+                        if len(func[1])+2!=func[2][2]:
+                            self.printError('Wrong number of parameters calling function '+func[0])
                         self.song.insertModification(instrum[1][1],float(t1),float(t2),parameter,func,-1) #-1 -> is function
                     else:
                         v1,t=self.getValue(instr[2][1][3])
@@ -2482,14 +2637,17 @@ class Interpreter:
                     t1,t=self.getValue(instr[2][1][0])
                     parameter,t=self.getValue(instr[2][1][1])
                     instrum=self.getSymbol(self.env)
-                    v1,t=self.getValue(instr[2][1][2])
+                    #v1,t=self.getValue(instr[2][1][2])
+                    t=instr[2][1][2][0]
+                    v1=self.getListValue(instr[2][1][2])
                     if t!='list':
                         self.printError('list expected as third parameter of function put')
+                    #v1=self.getListValue(v1)
                     self.song.insertParameters(instrum[1][1],t1,parameter,v1)
             elif instr[1]=='define':
                 code=compile(instr[3],'','exec')
                 func_code = FunctionType(code.co_consts[0], globals(), instr[2])
-                self.insertScoFunction(instr[2],[func_code,instr[4],-1])
+                self.insertScoFunction(instr[2],[func_code,instr[4],instr[5]])
             else:
                 self.printError('Unkown instruction '+instr[1])
         self.lineNumber=ant_lineNumber
@@ -2508,24 +2666,18 @@ class Interpreter:
             t,v=self.getSymbol(a[1])
             if t=='':
                 f=self.getScoFunction(a[1])
-                if f==None:
+                if f[0]=='':
                     self.printError('Unkown variable ' + a[1])
                 else:
                     return f[0],'function'
             return v,t
         elif a[0] in ['list','listVar','listMidi','listPitch']:
-            r=[]
-            for e in a[1]:
-                if type(e)==list:
-                    ne,t=self.getValue(e,isList)
-                    r.append(ne)
-                else:
-                    r.append(e)
-            return r,a[0]
+            a[1],t=self.getValue(a[1])
+            return a,a[0]
         elif a[0]=='pattern':
             time,t=self.getValue(a[1][0])
             parts,t=self.getValue(a[1][1])
-            if a[1][2][0]=='++':
+            if a[1][2][0]=='++': ### the '++' is here
                 a[1][2][0]='+++' #create listVar inside a pattern definition
             pat,tp=self.getValue(a[1][2])
             modPat,t=self.getValue(a[1][3])
@@ -2547,27 +2699,30 @@ class Interpreter:
                 else:
                     r.append(e)
             f=self.getScoFunction(a[1][0])
+            if len(r)+2 !=f[2]:
+                self.printError('Wrong number of parameters calling function '+a[1][0])
             return [a[1][0],r,f],'callLater'
-        #    print(self.callFunction(a[1][0],a[1][1]))
-            exit()
         elif a[0]=='ftgen':
             return a[1:],'ftgen'
         elif a[0]=='index':
-             value,tv=self.getValue(a[1])
+             array,tv=self.getValue(a[1])
              i,ti=self.getValue(a[2])
-             if tv in ['list','listVar','listPitch','listMidi']:
-                 v=value[int(i)][1]
-                 t=value[int(i)][0]
+             if tv in ['list']: #,'listVar','listPitch','listMidi']:
+                 element=array[1][int(i)]
+                 t=array[1][int(i)][0]
+                 if t not in ['list','listVar','listPitch','listMidi']:
+                     element=element[1] #get off the type
              else:
-                 v,t=self.getValue(value[int(i)])
-             return v,t
+                 self.printError(a[1][1] + ' is not an array')
+                 #element,t=self.getValue(array[int(i)])
+             return element,t
         elif a[0] in ['+++','++','+','-','*','/','%','^','||','&&','==','!=','>=','<=','<','>']:
             v1,t1=self.getValue(a[1])
-            v2,t2=self.getValue(a[2])        
+            v2,t2=self.getValue(a[2]) 
             if a[0]=='+':
                 return self.sumValues(v1,t1,v2,t2)
             elif a[0]=='++':
-                return self.createVarlist(v1,t1,v2,t2) # normal
+                return self.createVarlist(v1,t1,v2,t2) # normal`
             elif a[0]=='+++':
                 return self.createVarlist(v1,t1,v2,t2,True) #inside a pattern definition
             elif a[0]=='-':
@@ -2588,44 +2743,90 @@ class Interpreter:
                 return self.compareValues(v1,t1,v2,t2,a[0])
         else:
             return a,'literal'
-            #self.printError('Unkown instruction1 '+a[0])
+            #self.printError('Unkown instruction '+a[0])
+
+    def callNotDefinedFunction(self,name,params):
+        r=[]
+        for x in params:
+            val,t=self.getValue(x)
+            if t=='string':
+                val="'" + val + "'"
+            r.append(str(val))
+        try:
+            f= name + '(' + ','.join(r) +')'
+            v=eval(f)
+            if v==None:
+                return
+        except Exception as e:
+            self.printError(str(e))
+        return self.execEval(str(v))
+
 
     def callFunction(self,name,params):
         v=self.getScoFunction(name)
         f=v[0]
         tf=v[1]
         if f=='' : #### or tf=='':
-            self.printError('Unkown function '+name)
+            return self.callNotDefinedFunction(name,params)
+            self.printError('Function ' +  name + ' not defined')
         numParams=v[2]
         if numParams!=-1 and numParams!=len(params):
-            self.printError('wrong number of parameters')
+            self.printError('Wrong number of parameters calling function '+name)
         p=[]
         for x in params:
-          val,t=self.getValue(x)
-          if t in ['list','listVar'] :
-              val=self.getListValue(val)[1] ####only the list
-          elif t in ['listPitch','listMidi'] :
-              val=self.getListValue(val)[0]
-          p.append(val)
+            val,t=self.getValue(x)
+            if t in ['list','listVar','listPitch','listMidi'] :
+                val=self.getListValue(val)
+                if t in ['listPitch','listMidi'] :
+                    for i in range(0,len(val)):
+                        val[i]=val[i][0] #only the note, not the duration
+                p.append(val)
+            else:
+                p.append(val)
+
         if f!='':
             if tf=='':
                 f(*p)
+            elif tf==0:
+                return f(*p) #execEval
+            elif tf=='any':
+                r=f(*p)
+                if isinstance(r,str):
+                    return self.execEval(f(*p))
+                else:
+                    self.printError('Function ' +name +' should return a string')
             else:
                 return f(*p),tf
 
     def getListValue(self,l):
+        if not type(l)==list:
+            return l
         r=[]
+        t=l[0]
+        if t in ['list','listVar','listPitch','listMidi'] :
+            for e in l[1]:
+                v=self.getListValue(e)
+                r.append(v)
+            return r
+        elif t == 'identifier':
+            r,t=self.getValue(l)
+            return r
+        else:
+            return l[1]
+                
         for e in l:
             if type(e)==list:
-                t=e[0]
-                v=e[1]
-                if t in ['list','listVar','listPitch','listMidi'] :
+                v=e
+                if True or t in ['list','listVar','listPitch','listMidi'] :
                     v=self.getListValue(v)
+                    r.append(v)
+                    
                 else:
                     v,t=self.getValue(e)
+                    r.append(v)
             else:
                 v=e
-            r.append(v)
+                r.append(v)
         return r
                 
     def readPatch(self):
@@ -2688,10 +2889,10 @@ class Interpreter:
                    inputInstrument.inputs[ni]=[outputInstrument] 
                    n=0
                    for o in outputInstrument.zakOuts[no]:
-                       t=o[1]
-                       if o[2]==-1: #get a new zak number
+                       t=self.printType(o[1])
+                       if o[2]==-1: #get a new zak number###all outputs must have a zak number
                            num=self.song.getZakNumber(t)
-                           outputInstrument.zakOuts[no][n]=(o[0],t,num)
+                           outputInstrument.zakOuts[no][n]=[o[0],t,num]
                        else:
                            num=o[2]
                        oi=[ni,n,t,num]
@@ -2700,8 +2901,8 @@ class Interpreter:
                else:
                    self.printError('instrument '+ outputInstrument.name + " doesn't have output " + str(no))
             else:
-                instr=inputInstrument.inputs[ni][0].name
-                self.printError('instrument ' + inputInstrument.name + ', input '+ str(ni)+ ' already connected to '+instr  )
+                instr=inputInstrument.inputs[ni][0]
+                self.printError('instrument ' + inputInstrument.name + ', input '+ str(ni)+ ' already connected to '+instr)
             
     def readEnd(self):
         token,t=self.nextToken()
@@ -2728,6 +2929,15 @@ class Interpreter:
         while t=='identifier':
             i.append(token)
             token,t=self.nextToken()
+        while token!='eof' and token!='#':
+            token,t=self.nextToken()
+            if t=='identifier':
+                self.expectToken(['='])
+                value,t=self.nextToken()
+                if token=='options':
+                    self.song.insertOption(value)
+                token,t=self.nextToken()
+            
         return self.write(i,t1,t2) 
             
 
@@ -2740,24 +2950,8 @@ class Interpreter:
         pattern.setDictionary(d)
 
     def write(self,instr,t1,t2): 
+        self.charNumber=-1
         self.env='local'
-        for instrument in self.song.orchestra.instruments: #finish the instrument compilation
-            if type(instrument) is Instrument:
-                par=instrument.mod_params
-                instructions=instrument.instr
-                name=instrument.name
-                self.symbolTable['local']=instrument.table
-                returnParms=self.determineTypeOfOutputs(name,par,instructions)
-                instrument.insertZakOuts(returnParms)
-                self.cleanSymbolTable('local')
-
-        for instrument in self.song.orchestra.instruments: #finish the instrument compilation
-            if type(instrument) is Instrument:
-                instructions=instrument.instr
-                self.symbolTable['local']=instrument.table
-                inputs=self.determineTypeOfInputs(instructions)
-                instrument.insertInputs(inputs)
-                self.cleanSymbolTable('local')
 
         self.connectInstruments()
 
@@ -2776,8 +2970,6 @@ class Interpreter:
             r=''
             if line=='':
                 continue
-            #if line[0] in ['sr','kr','nchnls','0dbfs','ksmps']:
-            #    self.insertSymbol(line[0],'','')
             if self.oldStyle(line[2][0]): # old style
                 line[-2]=' '         # delete the = sign and the parenthesis
                 line[-1][1]=' '
@@ -2796,20 +2988,9 @@ class Interpreter:
                 self.state=self.ORCHESTRA
                 g=self.readOrchestra()
                 self.song.insertGlobal(g)
-            elif token=='options':
-                self.state=self.OPTIONS
-                op=self.readOptions()
-                self.song.insertOption(op)
             elif token=='score':
                 self.state=self.SCORE
                 self.readScore()
-            #elif token=='include':          # instrument file
-            #    name,t=self.nextToken()
-            #    try:
-            #        self.includeFile=open(name)
-            #        self.include=name
-            #    except IOError:
-            #        self.printError('error opening file '+name)
             elif token=='patchboard':
                 self.state=self.PATCH
                 self.connections=self.readPatch()
@@ -2828,9 +3009,14 @@ class Interpreter:
         return r,s  # return, arguments
         
     def initSignatures(self):
+                                  #y=any (out type = first param type)
+                                  #K=i or k, 
+                                  #A=a or k, in doubt, a
+                                  #B=a or k, in doubt, k 
+                                  #x=a or k or i
         func=[
             ['abs',['y','y']],  
-            ['ampdb',['y','y']],  # y=any (type = first param), K=i or k, A=a or k, x=a or k or i
+            ['ampdb',['y','y']],  
             ['ampdbfs',['y','y']],
             ['cent',['y','y']],
             ['cpspch',['y','y']],
@@ -2841,7 +3027,7 @@ class Interpreter:
             ['release',['k','']],
             ['sqrt',['y','y']],
         
-            ['adsr',['A','iiiii']],
+            ['adsr',['B','iiiii']],
             ['ampmidi',['i','ii']],
             ['biquad',['a','akkkkkki']],
             ['bqrez',['a','axxi']],
@@ -2857,25 +3043,25 @@ class Interpreter:
             ['diskin2',['a','ikiiiiii']],
             ['downsamp',['k','ai']],
             ['envlpx',['a','Xiiiiiii']], 
-            ['expseg',['A','iii']], 
-            ['expsegr',['A','iii']], 
+            ['expseg',['B','iii']], 
+            ['expsegr',['B','iii']], 
             ['foscil',['a','xkxxkii']], 
             ['foscili',['a','xkxxkii']],
             ['grain',['a','xxxkkkiiii']], 
             ['grain3',['a','kkkkkkikikkii']],
-            ['line',['A','iii']],
-            ['linseg',['A','iiii']],
+            ['line',['B','iii']],
+            ['linseg',['B','iiii']],
             ['loscil',['a','xkiiiiiiii']],
             ['loscil3',['a','xkiiiiiiii']],
+            ['madsr',['B','iiiiii']],
             ['midiout',['_','kkkk']],
             ['midion',['_','kkk']],
             ['midion2',['_','kkkk']],
             ['moog',['a','kkkkkkiii']],
-            ['moogladder',['a','aAAi']],
+            ['moogladder',['a','aBBi']],
             ['moogvcf',['a','axxi']],
             ['moogvcf2',['a','axxi']],
-            ['madsr',['A','iiiiii']],
-            ['mxadsr',['A','iiiiiii']],
+            ['mxadsr',['B','iiiiiii']],
             ['noise',['a','xk']],
             ['noteon',['_','iii']],
             ['noteondur',['_','iiii']],
@@ -2888,20 +3074,20 @@ class Interpreter:
             ['out',['_','a']],
             ['outs',['_','aa']],
             ['pan2',['a','axi']], 
-            ['phasor',['A','xxi']], 
+            ['phasor',['B','xxi']], 
             ['pluck',['a','kkiiiii']], 
-            ['poscil',['a','AAii']], ### return type?
+            ['poscil',['a','BBii']], ### return type?
             ['print',['_','i']], 
             ['pvsanal',['f','aiiiiii']], 
             ['pvsmaska',['f','fik']], 
             ['pvsynth',['a','fi']], 
-            ['rand',['A','xiii']],
+            ['rand',['B','xiii']],
             ['reson',['a','axxi']],
             ['rezzy',['a','axxii']],
             ['reverb',['a','aki']],
             ['scantable',['a','kkiiii']],
-            [ 'seed',['_','i']],
-            [ 'sum',['a','aaaa']],
+            ['seed',['_','i']],
+            ['sum',['a','aaaa']],
             ['table',['y','yiiii']],
             ['tablei',['y','yiiii']],
             ['table3',['y','yiiii']],
@@ -2911,8 +3097,9 @@ class Interpreter:
             ['vco2',['a','kkikki']],
             ['vco2init',['i','iiiiii']],
             ['vdelay',['a','aaii']],
+            ['vibrato',['k','kkkkkkkkii']],
             ['wgbow',['a','kkkkkkii']],
-            ['xadsr',['A','iiiiii']],
+            ['xadsr',['B','iiiiii']],
             ['zacl',['_','kk']],
             ['zar',['a','k']],
             ['zaw',['_','ak']],
@@ -2922,21 +3109,15 @@ class Interpreter:
         for f in func:
             self.insertOrcFunction(f[0],f[1])
 
-    def initScoreFunctions(self):
+    def initScoreFunctions(self):#####borrar
         func=[
-              ['abs',[lambda a: abs(a),'number',1]],
-              ['chr',[lambda a: chr(a),'string',1]],
-              ['int',[lambda a: int(a),'number',1]],
-              ['max',[lambda *x: max(x),'number',-1]], #num params == -1 -> any number
-              ['min',[lambda *x: min(x),'number',-1]],
-              ['ord',[lambda x: ord(x),'number',1]], ####
-              ['print',[print,'',-1]], ####
-              
+              ['array',[lambda x: ['list']+[[['list',None]] * x],'list',1]], #the types inside the list must be defined
+              ['eval',[self.execEval,0,1]],
               ['getTime',[self.execGetTime,'number',0]],
-              ['tempo',[self.execTempo,'',1]],
-              ['array',[lambda x: [None] * x,'list',1]],
-              ['transposeNote',[self.execTranspose,'string',2]],
+              ['getZakOut',[self.execGetZakOut,'list',2]],
               ['silence',[self.execSilence,'pattern',1]],
+              ['tempo',[self.execTempo,'',1]],
+              ['transposeNote',[self.execTranspose,'string',2]],
              ]
         for f in func:
             self.insertScoFunction(f[0],f[1])
@@ -2949,11 +3130,27 @@ class Interpreter:
             return self.song.getActualTime(instrument)
         else:
             return 0
+    
+    def execGetZakOut(self,instrument,n):
+        for instru in self.song.orchestra.instruments:     
+            if instrument==instru.name:
+                if n>=len(instru.zakOuts):
+                    self.printError('Instrument ' + instrument + '  does not have output ',str(n))
+                out=instru.zakOuts[n]
+                res=[]
+                for o in out:
+                    res.append(['number',o[2]])
+                return ['list', res]
+        self.printError('Instrument ' + instrument + '  not found') 
 
+    def execEval(self,s):
+        self.line = s+self.line
+        value,t=self.readExpression()
+        value,t=self.getValue(value)
+        return value,t
 
     def execTempo(self,t):
         self.song.setTempo(self.env,t)
-
 
     def execTranspose(self,note,semitones):
     #the note is a string in octave pitch format    
@@ -2966,7 +3163,9 @@ class Interpreter:
     def execSilence(self,t):
         return [Pattern(t,1,'x','',0)]
              
-    
+
+
+
 inFile=''
 outFile=''
 if len(sys.argv)==2:
