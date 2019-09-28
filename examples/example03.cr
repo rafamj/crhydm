@@ -1,12 +1,6 @@
 /*
    example03
 */
-#options
-  -odac
-  //-odac  -Ma
-  //-Q hw:1
-  //-+rtmidi=alsaseq -Q20 -odac
-
 #orchestra
   sr = 44100
   nchnls = 2
@@ -53,3 +47,8 @@
 #end
 //#end Synth
 //#end(0,4)Drum
+options='  -odac'
+  //-odac  -Ma
+  //-Q hw:1
+  //-+rtmidi=alsaseq -Q20 -odac
+

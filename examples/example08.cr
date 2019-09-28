@@ -1,9 +1,3 @@
-#options
-  //-odac
-  //-odac  -Ma
-  //-Q hw:1
--+rtmidi=alsaseq -Q20 -odac
-
 #orchestra
   //sr = 44100
   //nchnls = 2
@@ -60,4 +54,9 @@ instrument Midi10=Midi
 
 
 #end
+
+options='-+rtmidi=alsaseq -Q20 -odac'
+  //-odac
+  //-odac  -Ma
+  //-Q hw:1
 

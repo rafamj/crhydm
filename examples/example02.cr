@@ -2,12 +2,6 @@
 example 2
 swing demo using the parameters 4 and 5 when creating a pattern
 */
-#options
-  -odac
-  //-odac  -Ma
-  //-Q hw:1
-  //-+rtmidi=alsaseq -Q20 -odac
-
 #orchestra
   sr = 44100
   nchnls = 2
@@ -41,3 +35,7 @@ endinstrument
         endwhile
 #end
 
+options = '-odac'
+  //-odac  -Ma
+  //-Q hw:1
+  //-+rtmidi=alsaseq -Q20 -odac

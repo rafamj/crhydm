@@ -1,11 +1,8 @@
-#options
-;  -odac
-;this file can't be rendered in real time
--W -o example10.wav
 #orchestra
   sr = 44100
   nchnls = 2
   0dbfs = 1
+
 
 #score
     tempo(120)
@@ -16,8 +13,8 @@
   instrument Granular amp freq: grtab wintab dens gdur
 
       env=madsr(0.0001, 0.04 ,0.9,0.01) * amp
-      outl=grain3(cpspch(freq), 0, 0.04, 0, gdur, dens, 2000, grtab,   wintab,  0, 0)
-      outr=grain3(cpspch(freq), 0, 0.04, 0, gdur, dens, 2000, grtab,   wintab,  0, 0)
+      outl=grain3(freq, 0, 0.04, 0, gdur, dens, 2000, grtab,   wintab,  0, 0)
+      outr=grain3(freq, 0, 0.04, 0, gdur, dens, 2000, grtab,   wintab,  0, 0)
 
       <<env*outl, env*outr
 
@@ -26,17 +23,25 @@
 
 #score
       Granular:
+          define any generateValues():
+              import random
+
+              gdur=0.1 + random.random()
+              gdens=random.randint(200,900)
+              return '/gdur {}, dens {}/'.format(gdur,gdens)
+          enddefine
+
           f1=ftgen( 0,16384,20,2,1)
           f2=ftgen( 0 1024 10 1 0 .5 0 .33 0 .25 0 .2 0 .167)
 
           notes=/freq c7 e6 b f    a g a f    e c7 d a6    g a d7 g/
-          pattern=|1,16,'*'*16| * 4
-          pattern += /amp 0.01/ + /grtab 2/ + /wintab 1/ + /gdur 0.9/ + /dens 2000/
-          pattern += notes * 4
+          pattern=|1,16,'*'*16| 
+          pattern += /amp 0.01/ + /grtab 2/ + /wintab 1/ 
+          pattern += notes 
 
-          <<pattern * times 
-
-
+          for i=1 to 4*times
+              <<pattern + generateValues()
+          endfor
 #orchestra
 
   instrument Fm amp freq: car mod index
@@ -44,7 +49,7 @@
       t=ftgen(0,0,2048, 10, 1)
          
       env=linseg(0, 0.02, 1,p3-0.02, 0)
-      sig=foscili(amp, cpspch(freq), car, mod, index, t)
+      sig=foscili(amp, freq, car, mod, index, t)
 
       <<env*sig,env*sig
 
@@ -52,9 +57,13 @@
 
 #score
         Fm:
-          define void transpose(list,semitones,function): #not python functions must be passed as parameters
+          define string stacatto(v, g, s):
+              return str(float(v)*float(s))
+          enddefine
+
+          define void transpose(list,semitones): #not python functions must be passed as parameters
               for i in range(1,len(list)):
-                  list[i]=function(list[i],semitones)
+                  list[i]=inter.execTranspose(list[i],semitones)
           enddefine
 
           define void reverse(list):
@@ -63,25 +72,23 @@
               list.insert(0,p)
           enddefine
 
-          notes=array(eval('2 * 2')) //testing the function eval
+          notes=array(eval('2*2')) //testing the function eval
 
           notes[0]= /freq c5  b     a  a     e  d    /
           notes[1]= /freq d5  a     b  e     f  c    /
           notes[2]= /freq e5  g     a  g     f  e    /
           notes[3]= /freq f5  d     g  e     g  f    /
   
-                     
           pattern=|2,8,'***_*_**'| + /amp 0.3/ + /index 3/ + /mod 1/ 
           for n=0 to times-1
               pattern += notes[n%4] 
               reverse(notes[n%4])
-              transpose(notes[n%4],4,transposeNote) //transposeNote is a predefined function
+              transpose(notes[n%4],4)
               <<silence(2)
-              <<pattern
+              <<pattern * 'p3'::stacatto(1-(n+1)/(3*times))
           endfor
           t=getTime()
           var(0,t,'car',1,3)         
-
 #orchestra
 
   instrument scanTable amp freq:
@@ -93,8 +100,8 @@
     vel=  ftgen(0, 0, 128, -7, 0, 128, 0) ;Initial Velocity; constant value 0
 
     env=adsr(0.1,0.3,0.5,0.01)
-    a0=scantable(amp, cpspch(freq), pos, mass, stiff, damp, vel)
-    a1=oscil3(amp, cpspch(freq), pos)
+    a0=scantable(amp, freq, pos, mass, stiff, damp, vel)
+    a1=oscil3(amp, freq, pos)
     a1=dcblock2(a1)
     <<a1*env, a1*env
   endinstrument
@@ -119,8 +126,7 @@
              seventh=inter.execTranspose(root,11)
          else:
              seventh=inter.execTranspose(root,10)
-     
-         return [root,third,fifth, seventh] 
+         return ['list',[ ['string',root],['string',third],['string',fifth],['string', seventh]]] #types inside a list must be defined 
      enddefine
 
       pattern=|4,1,"*"|^4  + /amp 0.1/
@@ -138,7 +144,18 @@
 
 #orchestra
 
-  instrument additive amp1 amp2 amp3 amp4 amp5 amp6 freq: a1 d1 a2 d2 a3 d3 a4 d4 a5 d5 a6 d6
+
+        opcode Oscillator, a, kk  ;testing opcode
+
+              kamp, kcps      xin             ; read input parameters
+              a1      vco2 kamp, kcps         ; sawtooth oscillator
+              xout a1                 ; write output
+
+        endop
+
+
+  instrument additive amp1 amp2 amp3 amp4 amp5 amp6 freq: a1 d1 a2 d2 a3 d3 \
+                                                          a4 d4 a5 d5 a6 d6
 
     env1=expseg(0.01, a1, 1, d1, 0.01)
     env2=expseg(0.01, a2, 1, d2, 0.01)
@@ -147,13 +164,12 @@
     env5=expseg(0.01, a5, 1, d5, 0.01)
     env6=expseg(0.01, a6, 1, d6, 0.01)
 
-    fr=cpspch(freq)
-    a:s1=oscil(amp1,fr)
-    a:s2=oscil(amp2,fr*2)
-    a:s3=oscil(amp3,fr*4)
-    a:s4=oscil(amp4,fr*8)
-    a:s5=oscil(amp5,fr*16)
-    a:s6=oscil(amp6,fr*32)
+    s1=Oscillator(amp1,freq)
+    s2=Oscillator(amp2,freq*2)
+    s3=Oscillator(amp3,freq*3)
+    s4=Oscillator(amp4,freq*4)
+    s5=Oscillator(amp5,freq*5)
+    s6=Oscillator(amp6,freq*6)
 
     out=env1*s1+env2*s2+env3*s3+env4*s4+env5*s5+env6*s6
 
@@ -163,11 +179,20 @@
 #score
 
     additive:
-        pattern1=|4,16,/freq c8_ d f_ g__  a e_ f d_ z_/|
-        pattern2=|4,16,/freq c8 d f g  a e f d z_______/|
-        pattern3=|4,16,/freq d8_ c g_ f__  e a_ d f_ z_/|
-        pattern4=|4,16,/freq e8 f_ e_ g_ b   e_ g a_ g_ a/|
-        pattern5=|4,16,/freq a8_ g a_ g__  e b_ g e_ f_/|
+    
+        define number random(n):
+            import random
+
+            return random.randint(0,n)
+        enddefine
+
+        pattern=array(5)
+
+        pattern[0]=|4,16,/freq c8_ d f_ g__  a e_ f d_ z_/|
+        pattern[1]=|4,16,/freq c8 d f g  a e f d z_______/|
+        pattern[2]=|4,16,/freq d8_ c g_ f__  e a_ d f_ z_/|
+        pattern[3]=|4,16,/freq e8 f_ e_ g_ b   e_ g a_ g_ a/|
+        pattern[4]=|4,16,/freq a8_ g a_ g__  e b_ g e_ f_/|
   
         preset =/amp1 1/ + /a1 0.001/ + /d1 0.4/
         preset +=/amp2 0.5/ + /a2 0.002/ + /d2 0.5/
@@ -175,15 +200,13 @@
 
         n=times/8
 
-        <<pattern1 * n + preset
-        <<pattern2 * n * 2
-        <<pattern3 * n * 3
-        <<pattern4 * n 
-        <<pattern5 * n
+        for i=1 to 8
+            <<pattern[random(4)] * n + preset
+        endfor
 
         t=getTime()
 
-        var(0,t,'amp3',0.01,0.2)
+
         var(0,t/2,'amp4',0.01,0.05)
         var(t/2,t,'amp4',0.05,0.01)
 
@@ -225,7 +248,7 @@ endinstrument
 //#end additive mixer
 //#end scanTable mixer
 //#end Fm mixer
-//#end(0,4)
 #end
-
-
+options='-W -o example10.wav'
+;options='  -odac'
+;this file can't be rendered in real time

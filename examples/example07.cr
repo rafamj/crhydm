@@ -1,6 +1,3 @@
-#options
-  -odac
-  //-odac  -Ma
 
 #orchestra
   sr = 44100
@@ -59,7 +56,7 @@
 
 ;amplitude envelope
     AmpEnv=expsegr(0.0001,AA,1,AD,AS,AR,0.0001)
-    Out=(Out*AmpEnv)
+    Out=(Out*AmpEnv*0.8)
     outs(Out,Out)
 
   endinstrument
@@ -135,3 +132,5 @@
      << pattern17  *  3 * 'CF':[ 2,'>', 6, 6,'>',2] * 'Res':[0.6,'>',0.9] * 'FS':[0.3, '>', 0.9] * 'Amp1':[ -19, '>', -90]
 #end
 
+options='  -odac'
+  //-odac  -Ma

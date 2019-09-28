@@ -1,6 +1,3 @@
-#options
-  -odac
-
 #orchestra
   sr = 44100
   nchnls = 2
@@ -8,7 +5,7 @@
 
   instrument Bass vol freq: pan
     env=linseg(0,0.1,1,p3-0.2,1,0.1,0)
-    sig=pluck(ampdbfs(vol),cpspch(freq),cpspch(freq)*10,0,1)
+    sig=pluck(ampdbfs(vol),freq,freq*10,0,1)
     outs(sig*pan*env,sig*(1-pan)*env)
   endinstrument
 
@@ -26,13 +23,16 @@
       enddefine
 
 
-      define list generate():
-           #return 'a4 b_ c'
-           return [ [ 4.08, 1] , [4.10, 2] ,[4.00, 1]]  #it's equivalent to the string 'a4 b_ c'
+      define string generate():
+           return 'a4 b_ c'
+           #return [ [ 4.08, 1] , [4.10, 2] ,[4.00, 1]]  #it's equivalent to the string 'a4 b_ c'
+#in general, types inside a list must be defined, although in some cases the line above would work
+           #return ['list',['list',['string', '4.08'], ['number', 1]]], ['list', [['string', '4.10'], ['number', 2]]], ['list', [['string', '4.00'], ['number', 1]]]
       enddefine
      
 
       Bass:
+        aaa=['list',[ [ '4.08', 1] , ['4.10', 2] ,['4.00', 1]]]
         pattern=|2,4,'freq':generate()| + /vol -15/   //the pattern is the return value of a function
         //'pan'::vary(0.5) the ::  indicates that the function is called later
         <<pattern * 'pan':[1,0] * 'pan'::vary(0.5)    // the function vary changes the values of the pattern
@@ -59,8 +59,9 @@
         <<pattern * x:[1,0] * x::vary(a)
         <<pattern * 'pan':[0,1] * 'pan'::vary(0.1) - /freq e5 d c/   // makes the 3 last notes e d c
 
-        var(10,14,'pan',0,1)  // ensure that there is a  value and not a '.'
+        var(10,14,'pan',0.01,1)  // ensure that there is a  value and not a '.'
         var(10,14,'pan',vary(0.5))
 
 #end
+options='-odac'
 

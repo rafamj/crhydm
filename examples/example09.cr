@@ -1,5 +1,3 @@
-#options
-  -odac
 #orchestra
   sr = 44100
   nchnls = 2
@@ -98,4 +96,4 @@ f7=ftgen(0, 1024,   8, -.8, 42, -.78,  400, -.7, 140, .7,  400, .78, 42, .8)
         put(0,'pan',[0.5])
         put(t/2,'pan',[0,1,0,1,0.5])
 #end 
-
+options='  -odac'

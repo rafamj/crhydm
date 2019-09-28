@@ -1,5 +1,3 @@
-#options
-  -odac
 #orchestra
   sr = 44100
   nchnls = 2
@@ -30,7 +28,7 @@ endinstrument
         << pattern * 8
 
     Bass: 
-        pattern=|2,8,'__x**__*'| + 'vol':[ -10] 
+        pattern=|2,8,'__x**__*'| + 'vol':[-12 ] 
 
 	<< (((pattern + 'freq':{e5, e, a}) +  (pattern + 'freq':{g5, g, d}))  *2) + 'pan':[0]
 	<< (((pattern + 'freq':{c5, d, f}) +  (pattern + 'freq':{d5, c, a4})) *2) + 'pan':[0.3]
@@ -38,3 +36,4 @@ endinstrument
 	<< (((pattern + 'freq':{c5, d, f}) +  (pattern + 'freq':{d5, c, a4})) *2) + 'pan':[1]
 #end
 
+options='  -odac'
