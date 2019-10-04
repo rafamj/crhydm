@@ -146,6 +146,7 @@ class Score:
         self.functions=[]
         self.tempo=[]
         self.line=[] #this is a auxiliar variable, that can be examined inside a function
+        self.lastInsertion=-1
          
     def  asString(self, instruments,t1,t2):
         res= '<CsScore>\n'
@@ -253,6 +254,15 @@ class Score:
                 return float(score[1])
         return 0
 
+    def insertParallelPattern(self,instr, pat):
+        if self.lastInsertion==-1:
+            print('error inserting pattern')
+            exit()
+        else:
+            t2=self.getActualTime(instr.name)
+            self.updateTime(instr,self.lastInsertion-t2)
+            self.insertPattern(instr, pat)
+
     def insertPattern(self,instr, pat):
         l=[]
         for p in pat:
@@ -289,6 +299,7 @@ class Score:
             exit(0)
         if len(l)==1:
             return
+        self.lastInsertion=self.getActualTime(instr.name)
         for p in l[1]: 
             self.insertLineInInstrument(instr,p)
         self.updateTime(instr,l[0])
@@ -707,6 +718,9 @@ class Song:
     def insertPattern(self,n,p):
         self.score.insertPattern(n,p)
 
+    def insertParallelPattern(self,n,p):
+        self.score.insertParallelPattern(n,p)
+
     def insertString(self,instr,s):
         self.score.insertString(instr,s)
 
@@ -759,7 +773,6 @@ class Interpreter:
     PATCH=6
 
     def __init__(self,fileName):
-        self.file=open(fileName,"r")
         self.state=self.START
         self.song=Song()
         self.symbolTable={}
@@ -779,6 +792,10 @@ class Interpreter:
         self.includeFile=''
         self.octave=0 #used in translatePitch
         self.connections=[]
+        try:
+            self.file=open(fileName,"r")
+        except FileNotFoundError:
+            self.printError('file ' + fileName + ' not found')
 
     def readLine(self):
         if self.include=='':
@@ -992,7 +1009,7 @@ class Interpreter:
             if ch in ['+','*','-','/','=','<','>','|','&','{','}','!']:
                 ch1=self.nextChar()
                 c=ch+ch1
-                if c in ['+=','-=','*=','/=','==','<=','<<','>=','>>','||','&&','{{','}}','!=']: 
+                if c in ['+=','-=','*=','/=','==','<=','<<','>=','>>','||','&&','{{','}}','!=','|<']: 
                     return c,c
                 else:
                      self.unread(ch1)
@@ -1292,8 +1309,14 @@ class Interpreter:
             self.expectToken([','])
             valuek,t=self.readExpression() # t is integer??
             self.expectToken([')'])
-            self.song.orchestra.zakNumbera=int(valuea) 
-            self.song.orchestra.zakNumberk=int(valuek)
+            if self.song.orchestra.zakNumbera==0:
+                self.song.orchestra.zakNumbera=int(valuea) 
+            else:
+                self.printError('zak number a already reserved')
+            if self.song.orchestra.zakNumberk==0:
+                self.song.orchestra.zakNumberk=int(valuek)
+            else:
+                self.printError('zak number k already reserved')
             return ''
         if token=='\n':
             return ''
@@ -1314,7 +1337,7 @@ class Interpreter:
                     t1,v=self.getSymbol(var)
                     if t1=='':
                         if self.env=='general':
-                            if var not in ['sr','kr','nchnls','0dbfs','ksmps']:
+                            if var not in ['sr','kr','nchnls','nchnls_i','0dbfs','ksmps']:
                                 self.insertSymbol(var,'g'+t,'')
                         else:
                             self.insertSymbol(var,t,'')
@@ -1672,11 +1695,16 @@ class Interpreter:
 
 
     def isParPitch(self,par):
+        if self.env=='general':
+            self.printError('instrument not defined')
         t,instr=self.getSymbol(self.env)
         return par in instr[1].pitchPar
         
     def isParMidi(self,par):
+        if self.env=='general':
+            self.printError('instrument not defined')
         t,instr=self.getSymbol(self.env)
+
         return par in instr[1].midiPar
         
         
@@ -2005,7 +2033,16 @@ class Interpreter:
     def readValueOrchestra(self): # i | k | a | ( expr ) | call()
         value,t=self.nextToken()
         if t=='number':
-            return value,'i'
+            if value=='0':
+                vah,t=self.nextToken()
+                if vah=='dbfs':
+                    value='0dbfs' #don't need to insert in symbol table
+                    return value,'i'
+                else:
+                    self.unread(vah)
+                    return value,'i' #return 0
+            else:
+                return value,'i'
         elif t=='string':
             return '"' + value + '"', t
         elif t=='-':
@@ -2209,6 +2246,19 @@ class Interpreter:
                 else:
                     break
             
+            decim=''
+            if ch=='.':
+                i+=1
+                if i<len(value):
+                    ch=value[i]
+                while ch>='0' and ch<='9':
+                    decim +=ch
+                    i+=1
+                    if i<len(value):
+                        ch=value[i]
+                    else:
+                        break
+            
             while ch=='_':
                 duration+=1 
                 ch=value[i]
@@ -2224,7 +2274,7 @@ class Interpreter:
             v=v[-2:]
 
         self.octave=octave
-        return octave + '.' + v, duration
+        return octave + '.' + v + decim, duration
 
     def readVarlist(self):
         t=[]
@@ -2391,6 +2441,18 @@ class Interpreter:
         elif t=='string':
             self.song.insertString(instr[1][0],value)
 
+    def insertParallelPattern(self,value,t):
+        #value=self.getListValue(value)
+        instr=self.getSymbol(self.env)
+        if t=='pattern':
+            for p in value:
+                if type(p).__name__=='Pattern':
+                    self.insertTranslations(p)
+            self.song.insertParallelPattern(instr[1][1],value)
+            
+        elif t=='string':
+            self.song.insertString(instr[1][0],value)
+
     def isInstrument(self,name):
         t,instr=self.getSymbol(name)
         if t=='instrument':
@@ -2445,9 +2507,9 @@ class Interpreter:
                         return [self.lineNumber] +self.readAssignation([t,token])
         elif t=='string':
             return [self.lineNumber] + self.readDictionaryEntry(token)
-        elif t=='<<':
-            value,t=self.readExpression()
-            return [self.lineNumber,'<<',value]
+        elif t=='<<' or t=='|<':
+            value,t1=self.readExpression()
+            return [self.lineNumber,t,value]
         elif t=='\n':
             return None
         else:
@@ -2584,6 +2646,10 @@ class Interpreter:
                 v,t=self.getValue(instr[2])
                 p=copy.deepcopy(v)
                 self.insertPattern(p,t)
+            elif instr[1]=='|<':
+                v,t=self.getValue(instr[2])
+                p=copy.deepcopy(v)
+                self.insertParallelPattern(p,t)
             elif instr[1]=='>':
                 value,t=self.getValue(instr[3])
                 self.symbolTable[self.env]['dictionary'][instr[2]]=value
@@ -2882,8 +2948,13 @@ class Interpreter:
         for c in self.connections:
             inputInstrument=c[0]
             ni=c[1]
+            if ni<0 or ni>=len(inputInstrument.inputs):
+                self.printError(inputInstrument.name + ', incorrect number of input, '+str(ni))
             outputInstrument=c[2]
             no=c[3]
+            if ni<0 or no>=len(outputInstrument.zakOuts):
+                self.printError(outputInstrument.name + ', incorrect number of output, '+str(no))
+
             if len(inputInstrument.inputs[ni])==0:
                if len(outputInstrument.zakOuts)>no:
                    inputInstrument.inputs[ni]=[outputInstrument] 
@@ -3028,6 +3099,7 @@ class Interpreter:
             ['sqrt',['y','y']],
         
             ['adsr',['B','iiiii']],
+            ['adsyn',['a','kkki']],
             ['ampmidi',['i','ii']],
             ['biquad',['a','akkkkkki']],
             ['bqrez',['a','axxi']],
@@ -3045,6 +3117,13 @@ class Interpreter:
             ['envlpx',['a','Xiiiiiii']], 
             ['expseg',['B','iii']], 
             ['expsegr',['B','iii']], 
+            ['fmb3',['a','kkkkkkiiiii']],
+            ['fmbell',['a','kkkkkkiiiiii']],
+            ['fmmetal',['a','kkkkkkiiiii']],
+            ['fmpercfl',['a','kkkkkkiiiii']],
+            ['fmrhode',['a','kkkkkkiiiii']],
+            ['fmvoice',['a','kkkkkkiiiii']],
+            ['fmwurlie',['a','kkkkkkiiiii']],
             ['foscil',['a','xkxxkii']], 
             ['foscili',['a','xkxxkii']],
             ['grain',['a','xxxkkkiiii']], 
@@ -3077,6 +3156,7 @@ class Interpreter:
             ['phasor',['B','xxi']], 
             ['pluck',['a','kkiiiii']], 
             ['poscil',['a','BBii']], ### return type?
+            ['powershape',['a','aki']],
             ['print',['_','i']], 
             ['pvsanal',['f','aiiiiii']], 
             ['pvsmaska',['f','fik']], 
