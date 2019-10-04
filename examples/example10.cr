@@ -248,6 +248,7 @@ endinstrument
 //#end additive mixer
 //#end scanTable mixer
 //#end Fm mixer
+//#end(0,1)
 #end
 options='-W -o example10.wav'
 ;options='  -odac'

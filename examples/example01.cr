@@ -59,9 +59,14 @@
         l=100
         // vol = -19. Pan changes in the same note (glissable parameter)
         << |l,1,'*'|^7 + /vol -19/ + /freq c4 c5 g b c6 d c7/ + /pan 1 > 0/ //7 notes chord
+        |< |l,4,'*__*'|  + /vol -1/ + /freq c3 c3+/  // bass movement toward the next chord
         << |l,1,'*'|^7 + /vol -19/ + /freq d4 d5  a  c6 d f d7/ + /pan 0 > 1/   // 'vol':[-19] == 'vol':'-19'
+        |< |l,4,'*__*'|  + /vol -1/ + /freq d3 d3-/  // bass movement toward the next chord
         << |l,1,'*'|^7 + /vol -19/ + /freq c4 c5 g b c6 d c7/+/pan 1 > 0/
+        |< |l,4,'*__*'|  + /vol -1/ + /freq c3 c3+/  // bass movement toward the next chord
         << |l,1,'*'|^7 + /vol -19/ + /freq d4 d5 a c6 d f d7/+/pan 0 > 1/
+        |< |l,4,'*__*'|  + /vol -1/ + /freq d3 d3-/  // bass movement toward the next chord
         << |10,1,'*'|^7 + /vol -19 > -60/ + /freq c4 c5 g b c6 d c7/ +/pan 0.2 > 1/
+        |< |l,4,'****'|  + /vol -1/ + /freq c3.5 c3.3 c3.1 c3/  //microtonality
 #end
 options = '-odac'
