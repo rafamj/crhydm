@@ -126,10 +126,13 @@
              seventh=inter.execTranspose(root,11)
          else:
              seventh=inter.execTranspose(root,10)
-         return ['list',[ ['string',root],['string',third],['string',fifth],['string', seventh]]] #types inside a list must be defined 
+
+         bassRoot=inter.execTranspose(root,-12)
+         bassFifth=inter.execTranspose(fifth,-12)
+         return ['list',[ ['string',root],['string',third],['string',fifth],['string', seventh],['string', bassRoot],['string', bassFifth]]] #types inside a list must be defined 
      enddefine
 
-      pattern=|4,1,"*"|^4  + /amp 0.1/
+      pattern=|4,2,"*_"|^4 * '**' + /amp 0.1/  //4 note chord in parallel with 2 notes bass (pattern * string)
       
       for i=0 to (times-1)/8
           <<pattern + 'freq':generateChord({a6},1)
@@ -249,7 +252,7 @@ endinstrument
 //#end scanTable mixer
 //#end Fm mixer
 //#end(0,1)
-#end
+#end 
 options='-W -o example10.wav'
 ;options='  -odac'
 ;this file can't be rendered in real time

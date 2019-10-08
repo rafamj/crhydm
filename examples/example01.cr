@@ -11,6 +11,8 @@
         outs(env*sigl,env*sigr)
     endinstrument
 
+    opcode wgbow, a, kkkkkkii.
+
     instrument pad vol+ freq: pan+ // the parameters vol and pan are glissable
         vibf=rand(2)
         sig=wgbow(ampdbfs(vol),freq,3,0.2,vibf,0.1)
