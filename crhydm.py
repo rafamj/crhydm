@@ -349,8 +349,8 @@ class Score:
                     print('error in variation',variation)
                     exit()
             v2=float(variation[i+1])
-            if g and glissN==-1 or not g:
-                t2-=lastDur
+            #if g and glissN==-1 or not g:  ##problems with parallel inserts (difficult to determine lastDur)
+            #    t2-=lastDur
             for line in l:
                 if line[0]!=SILENCE_CHAR and line[0]!=PROL_CHAR:
                     t=float(line[0])
@@ -655,6 +655,9 @@ class Pattern:
             np=0
             while np<len(mainPat): #loops over every main pattern
                 line[np]=['.'] * (len(instr.params) -1)
+                if mainPat[np]=='':
+                    print('error 3 in pattern '+self.pattern[0][np]+'. Pattern too short')
+                    exit()
                 if mainPat[np][0]=='(':
                     mainPat[np]=mainPat[np][1:]
                     legato=True
@@ -665,6 +668,9 @@ class Pattern:
                     if  len(mainPat[np])==0: # ( at the end
                         np+=1
                         continue
+                if parts[np]>=len(self.durations):
+                    print('error 4 in pattern '+self.pattern[0][np]+'. Pattern too long')
+                    exit()
                 mainPat[np],t[np]=self.translateMain(line[np],mainPat[np],instr, t[np], legato,self.durations[parts[np]])
                 parts[np]+=1 #only verify parts in the main pattern
                 if mainPat[np]==None:
@@ -1294,11 +1300,12 @@ class Interpreter:
             self.song.insertInstrument(i)
             return ''
         if token=='opcode':
-            name,outTypes,inTypes,text=self.readOpcodeText() 
-            o=Opcode(name,', '+outTypes+', '+inTypes+'\n'+text+'\n')
-            outTypes,inTypes=self.translateTypes(outTypes,inTypes)
+            name,outTypes,inTypes,text=self.readOpcodeText()
+            if len(text)>0: 
+                o=Opcode(name,', '+outTypes+', '+inTypes+'\n'+text+'\n')
+                outTypes,inTypes=self.translateTypes(outTypes,inTypes)
+                self.song.insertOpcode(o)
             self.insertOrcFunction(name,[outTypes,inTypes])
-            self.song.insertOpcode(o)
             return ''
         if token=='rename':
             self.renameInstrument()
@@ -1619,7 +1626,7 @@ class Interpreter:
 
     def isEndin(self,line,end):
         n=line.find(end)  ###
-        return n!=-1
+        return n!=-1 or (len(line)==0)
 
     def readInstrText(self):
         name,t1=self.nextToken()
@@ -1646,7 +1653,14 @@ class Interpreter:
         r,s=self.searchFunctionSignature(name)
         if not (r=='' and s==''):
             self.printError('opcode already defined '+ name)
-        text=''
+        if inTypes[-1]=='.':   # '.' is a valid character in an identifier
+            inTypes=inTypes[:-1]
+            token='.'
+        else:
+            token,t=self.nextToken()
+        if token=='.':   #opcode already existent in csound
+            return name,outTypes,inTypes,''
+        text=token
         self.readLine()
         line=self.line
         while not self.isEndin(line,'endop'):
@@ -1710,63 +1724,62 @@ class Interpreter:
         
     def createVarlist(self,v1,t1,v2,t2,isPattern=False):
         #v1 is always of type string
-        if True or t1 == 'string':
-             if t2 in ['call','callLater']: #####
-                 if isPattern:
-                     v2,t2=self.callFunction(v2[0],v2[1]) ##getValue???
-                 else:
-                     v1,t1=self.getValue(v1)
-                     return ['callLater',v1 , v2],'callLater'
-             if t2 in ['list'] :
-                 if v1[0][0]=='identifier':  #why not call getValue???
-                     #v1,t1=self.getValue(v1[0])
-                     v1=[[t1,v1]]
-                 for i in range(len(v2[1])):
-                     e,t=self.getValue(v2[1][i])
-                     v2[1][i]=[t,e]
-                 res=['listVar', [[t1,v1]] + v2[1]]
-                 return res,'listVar'
-             if t2 in ['listPitch','listMidi']:
-                 #v2,t=self.getValue(v2)
-                 if not isPattern:
-                     r=[]
-                     v2=self.getListValue(v2) #the first element must be 'list...'
-                     for e in v2:
-                     #    e,t=self.getValue(e)
-                         r.append(e[0])
-                     v2=r     
-                 else:
-                     v2=v2[1]
-                 #v2=v2[1][0]
-                 res=['listVar',[[t1,v1]] + v2]
-                 return res,'listVar'
-             if t2 in ['string']:
-                 v2=v2.replace('>',' > ').split()
-                 v1,t=self.getValue(v1)
-                 m=self.isParMidi(v1)
-                 if self.isParPitch(v1) or m:
-                     r=[[t1,v1]]
-                     for e in v2:
-                         p,d=self.translatePitch(e)
-                         if m:
-                             p=self.pitchToMidi(p)
-                         if isPattern:    
-                             r.append(['list',[['string',p],['number',d]]]) ##['list'... ???
-                         else:
-                             r.append(['string',p])
-                 else:
-                     r=[[t1,v1]]
-                     for e in v2:
-                         r.append(['string',e])
-                 #v1=['list',v1]
-                 res=['listVar',r]
-                 return res,'listVar'
-             if t2 in ['number']:
-                 v1,t1=self.getValue(v1)
-                 res=['listVar',[[t1,v1],[t2,v2]]]
-                 return res,'listVar'
+        if t2 in ['call','callLater']: #####
+            if isPattern:
+                v2,t2=self.callFunction(v2[0],v2[1]) ##getValue???
+            else:
+                v1,t1=self.getValue(v1)
+                return ['callLater',v1 , v2],'callLater'
+        if t2 in ['list'] :
+            if v1[0][0]=='identifier':  #why not call getValue???
+                #v1,t1=self.getValue(v1[0])
+                v1=[[t1,v1]]
+            #for i in range(len(v2[1])):
+            #    e,t=self.getValue(v2[1][i])
+            #    v2[1][i]=[t,e]
+            res=['listVar', [[t1,v1]] + v2[1]]
+            return res,'listVar'
+        if t2 in ['listPitch','listMidi']:
+            #v2,t=self.getValue(v2)
+            if not isPattern:
+                r=[]
+                v2=self.getListValue(v2) #the first element must be 'list...'
+                for e in v2:
+                #    e,t=self.getValue(e)
+                    r.append(e[0])
+                v2=r     
+            else:
+                v2=v2[1]
+            #v2=v2[1][0]
+            res=['listVar',[[t1,v1]] + v2]
+            return res,'listVar'
+        if t2 in ['string']:
+            v2=v2.replace('>',' > ').split()
+            v1,t=self.getValue(v1)
+            m=self.isParMidi(v1)
+            if self.isParPitch(v1) or m:
+                r=[[t1,v1]]
+                for e in v2:
+                    p,d=self.translatePitch(e)
+                    if m:
+                        p=self.pitchToMidi(p)
+                    if isPattern:    
+                        r.append(['list',[['string',p],['number',d]]]) ##['list'... ???
+                    else:
+                        r.append(['string',p])
+            else:
+                r=[[t1,v1]]
+                for e in v2:
+                    r.append(['string',e])
+            #v1=['list',v1]
+            res=['listVar',r]
+            return res,'listVar'
+        if t2 in ['number']:
+            v1,t1=self.getValue(v1)
+            res=['listVar',[[t1,v1],[t2,v2]]]
+            return res,'listVar'
         self.printError('types '+t1+' and '+t2+" can't be joined")
-    
+  
     
     def sumValues(self,v1,t1,v2,t2):
         if t1=='number':
@@ -1900,6 +1913,9 @@ class Interpreter:
                 v1.append(v2)
                 v1.extend('*')
                 return v1,'pattern'
+            if t2=='string':
+                v1[0].pattern[0].append(v2)
+                return v1,'pattern'
         elif t1=='string':
             if t2=='number':
                 return v1*int(v2),'string'
@@ -1949,7 +1965,10 @@ class Interpreter:
             if t2=='number':
                 v=copy.deepcopy(v1)
                 for p in v:
-                    p.reply(v2)
+                    if type(p).__name__=='Pattern':
+                        p.reply(v2)
+                    else:
+                        self.printError('Patterns can only be exponentiated before adding any parameter values')
                 return v,'pattern'
         self.printError('types '+t1+' and '+t2+" can't be divided")
 
@@ -2430,7 +2449,6 @@ class Interpreter:
         return ['>',key,value]
 
     def insertPattern(self,value,t):
-        #value=self.getListValue(value)
         instr=self.getSymbol(self.env)
         if t=='pattern':
             for p in value:
@@ -2503,6 +2521,8 @@ class Interpreter:
                             tok=self.peekNextChar()
                         ass=self.readAssignation(token)
                         return [self.lineNumber] +ass
+                    elif tok==':':
+                        self.printError('instrument name expected')
                     else:          # assignation
                         return [self.lineNumber] +self.readAssignation([t,token])
         elif t=='string':
