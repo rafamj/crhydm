@@ -679,10 +679,11 @@ class Pattern:
                 #now, for every main pattern, add the secondary patterns
                 nnp=0
                 while nnp<len(pat):
-                    line[np],pat[nnp][np]=self.translateMore(instr,line[np], pat[nnp][np])
-                    if line[np] is None :
-                        print('error 2 in pattern '+self.pattern[nnp][np]+' translation not found')
-                        exit()
+                    if np<len(pat[nnp]):
+                        line[np],pat[nnp][np]=self.translateMore(instr,line[np], pat[nnp][np])
+                        if line[np] is None :
+                            print('error 2 in pattern '+self.pattern[nnp][np]+' translation not found')
+                            exit()
                     nnp+=1
                 res[np].append(line[np])    
                 np+=1
@@ -2101,6 +2102,8 @@ class Interpreter:
                     res.append(',')
                     value,t=self.readExpression()
                     if res[0]!='ftgen':
+                        if i>=len(s):
+                            self.printError('too much parameters in the function ' + value)
                         self.adaptParameterType(value,t,s[i])
                     res.append(value)
                     v,ty=self.nextToken()
@@ -2393,7 +2396,7 @@ class Interpreter:
                 t2='callLater'
             #if t2!='':
             #    v2=[t2,v2]
-            if t2 in ['listMidi','listVar']: ##???
+            if t2 in ['listMidi','listVar','list']: ##???
                 res= ['++',[t1,v1],v2[0]] #++ means createVarlist
             elif t2=='identifier':
                 res= ['++',[t1,v1],[t2,v2]]
