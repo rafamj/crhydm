@@ -82,7 +82,8 @@
         define any randomNote():
             import random
           
-            note= '{}.{:02d}'.format(random.randint(5,9),random.randint(0,11))
+            octave=str(random.randint(5,9))
+            note=['a','b','c','d','e','f','g'][random.randint(0,6)] + octave
             pos=random.randint(0,50)
             pattern='________________'
             p=list(pattern)
@@ -91,7 +92,7 @@
             pattern=''.join(p)
             pan=str(random.random())
             vol= '-' +str(random.randint(12,20))
-            return '|1,16,"{}"| + "vol":[{}] + "freq":[{}] + "pan":[{}]'.format(pattern,vol,note,pan)
+            return '|1,16,"{}"| + /vol {}, freq {}, pan {}/'.format(pattern,vol,note,pan)
         enddefine
 
         for i=0 to 399
