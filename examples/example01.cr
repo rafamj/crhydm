@@ -11,8 +11,6 @@
         outs(env*sigl,env*sigr)
     endinstrument
 
-    opcode wgbow, a, kkkkkkii.
-
     instrument pad vol+ freq: pan+ // the parameters vol and pan are glissable
         vibf=rand(2)
         sig=wgbow(ampdbfs(vol),freq,3,0.2,vibf,0.1)
@@ -20,6 +18,14 @@
         sig1=butterlp(sig,ffreq)
         sigl,sigr=pan2(sig1,pan)
         outs(sigl,sigr)
+    endinstrument
+
+
+    opcode STKRhodey,a,ii.  //opcodes not declared in crhydm.py can be declared
+
+    instrument piano vol freq: pan
+        sig=STKRhodey(freq,ampdbfs(vol))
+        outs(sig*pan,sig*(1-pan))
     endinstrument
 
 #score
@@ -70,5 +76,27 @@
         |< |l,4,'*__*'|  + /vol -1/ + /freq d3 d3-/  // bass movement toward the next chord
         << |10,1,'*'|^7 + /vol -19 > -60/ + /freq c4 c5 g b c6 d c7/ +/pan 0.2 > 1/
         |< |l,4,'****'|  + /vol -1/ + /freq c3.5 c3.3 c3.1 c3/  //microtonality
+
+    piano:
+
+        define any randomNote():
+            import random
+          
+            note= '{}.{:02d}'.format(random.randint(5,9),random.randint(0,11))
+            pos=random.randint(0,50)
+            pattern='________________'
+            p=list(pattern)
+            if pos<16:
+                p[pos]='*'
+            pattern=''.join(p)
+            pan=str(random.random())
+            vol= '-' +str(random.randint(12,20))
+            return '|1,16,"{}"| + "vol":[{}] + "freq":[{}] + "pan":[{}]'.format(pattern,vol,note,pan)
+        enddefine
+
+        for i=0 to 399
+            << randomNote()
+        endfor
+        
 #end
 options = '-odac'
