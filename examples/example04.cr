@@ -56,11 +56,7 @@ instrument echo rvt lpt
 endinstrument
 
 #patchboard
-   //mixer[0]>>echo[0] //output of mixer connected to input of echo
-
    mixer[0]<<Fm  //it's Fm[0] by default
-   //mixer[1]<<wave
-   //mixer[2]<<echo
 
 #score
   f1=ftgen(0,1024,10,1)
