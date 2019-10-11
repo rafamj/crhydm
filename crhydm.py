@@ -254,13 +254,17 @@ class Score:
                 return float(score[1])
         return 0
 
+    def setActualTime(self,instr,time):
+        for score  in self.list:
+            if score[0]==instr:
+                score[1]=time
+
     def insertParallelPattern(self,instr, pat):
         if self.lastInsertion==-1:
             print('error inserting pattern')
             exit()
         else:
-            t2=self.getActualTime(instr.name)
-            self.updateTime(instr,self.lastInsertion-t2)
+            self.setActualTime(instr.name,self.lastInsertion)
             self.insertPattern(instr, pat)
 
     def insertPattern(self,instr, pat):
@@ -743,6 +747,9 @@ class Song:
     def getActualTime(self,instr):
         return self.score.getActualTime(instr)
 
+    def setActualTime(self,instr,time):
+        self.score.setActualTime(instr,time)
+
     def insertOption(self,o):
         self.options.insert(o)
 
@@ -1073,8 +1080,8 @@ class Interpreter:
             elif typeExpression=='string':
                 text +='"' + s +'"'
             else:    
-                n=self.getParNumber(par,s)
-                if n>-1 :
+                #n=self.getParNumber(par,s)
+                if False and n>-1 :############
                     text += 'p'+ str(n+4)  #in order to not adding the type at the start
                 else:   
                     if s.isnumeric():
@@ -1093,7 +1100,11 @@ class Interpreter:
                             #    s=instrName + '_' +s
                             #if style=='old' and (s=='=' or s=='(' or s==')'):
                             #    s=' '
-                            if t=='l':
+                            if t=='p':
+                                n=self.getParNumber(par,s)
+                                s= 'p'+ str(n+4) 
+                                t=''
+                            elif t=='l':
                                 t=''
                                 s=v
                             t=self.printType(t)    
@@ -1246,7 +1257,7 @@ class Interpreter:
         return text
 
     def oldStyle(self, f):
-        return f in ['tablei','init','loscil','loscil3','ftgen']
+        return f in ['tablei','init','loscil','loscil3','ftgen','min']
         
     def getParNumber(self,params,p): #the instrument has not been created yet
         try:
@@ -1450,10 +1461,10 @@ class Interpreter:
         if token=='=':  #variable declaration or assignation
             value,t=self.readExpression()
             #print(value,t)
+            r=[]
             for var in result:
                 if var!=',':
                     t1,v=self.getSymbol(var)
-                    #print(var,v,t1,t)
                     if t1=='':
                         if t=='gi':
                             for i in range(len(result)):
@@ -1462,10 +1473,25 @@ class Interpreter:
                             self.insertSymbol(var,t+ name + '_','')
                         else:
                             self.insertSymbol(var,t,'')
+                        r.append(var)
+                    elif t1=='p': #redefinition of parameter
+                        r.append(v)
+                        if t not in ['p','i']:
+                            self.printError('redefinition of parameter ' +var+' not allowed')
+                        #else:
+                        #    self.insertSymbol(var,t,'')
+                        #t1,v=self.getSymbol(var)
                     elif t1=='i':
+                        r.append(var)
                         self.insertSymbol(var,t,'')
+                    else:
+                        r.append(var)
+                else:
+                    r.append(var)
+                        
             if t=='gi':
                 return ''
+            result=r
             result.append('=')
             result.append(value)
         elif token=='>>':  #input from zak system
@@ -1582,14 +1608,14 @@ class Interpreter:
         instr=[]
         i=4
         #par = ['p1','p2','p3'] + par
-        self.insertSymbol('p3','i','p3')
+        self.insertSymbol('p3','p','p3')
         for p in par:
-            self.insertSymbol(p,'i','p'+str(i))
+            self.insertSymbol(p,'p','p'+str(i))
             i=i+1
         for p in pitchPar:
             if p not in glissPar:
                 n=par.index(p)
-                line=[p , '=', 'cpspch' , '(', 'p' + str(n+4)  ,')']
+                line=['p' + str(n+4) , '=', 'cpspch' , '(', 'p' + str(n+4)  ,')']
                 instr.append(line)
                 par[n]='__deleted_parameter'
         for p in glissPar:
@@ -2048,6 +2074,8 @@ class Interpreter:
             elif (t=='A' or t=='B') and (pt=='x' or pt=='a'):
                  t='a'
                  self.insertSymbol(value,t,'')
+            elif (t=='A' or t=='B') and pt=='i':
+                self.printError('incompatible parameter type of parameter '+value)
 
 
     def readValueOrchestra(self): # i | k | a | ( expr ) | call()
@@ -2130,6 +2158,9 @@ class Interpreter:
                 t1,v=self.getSymbol(value)
                 if t1=='':
                     self.printError('unknown variable '+value)
+                elif t1=='p': #parameter
+                    value=v
+                    t1='i'
                 return value,t1
         else:        
            return value,'x'
@@ -2201,7 +2232,7 @@ class Interpreter:
     def translatePitch(self,value):
         try:
             float(value)
-            return value #it is pitch class notation
+            return value,1 #it is pitch class notation
         except ValueError: #it is abc notation
             if value[0]=='z' or value[0]=='Z':
                 octave='0'
@@ -2396,8 +2427,10 @@ class Interpreter:
                 t2='callLater'
             #if t2!='':
             #    v2=[t2,v2]
-            if t2 in ['listMidi','listVar','list']: ##???
+            if t2 in ['listMidi','listVar']: ##???
                 res= ['++',[t1,v1],v2[0]] #++ means createVarlist
+            elif t2=='list':
+               res= ['++',[t1,v1],[t2,v2]]
             elif t2=='identifier':
                 res= ['++',[t1,v1],[t2,v2]]
             elif t2=='':
@@ -2897,13 +2930,18 @@ class Interpreter:
                 v=self.getListValue(e)
                 r.append(v)
             return r
-        elif t == 'identifier':
+        elif t == 'identifier':  ###unify
             r,t=self.getValue(l)
             return r
         else:
-            return l[1]
+            r,t=self.getValue(l)
+            return r
+
+            #return l[1]
                 
         for e in l:
+            print('xxxx')################
+            exit()
             if type(e)==list:
                 v=e
                 if True or t in ['list','listVar','listPitch','listMidi'] :
@@ -3114,9 +3152,11 @@ class Interpreter:
             ['ampdbfs',['y','y']],
             ['cent',['y','y']],
             ['cpspch',['y','y']],
+            ['expon',['B','iii']],
             ['int',['y','y']],
             ['init',['y','y']],
             ['ftlen',['i','i']],
+            ['min',['y','y'*100]],
             ['octave',['y','y']],
             ['release',['k','']],
             ['sqrt',['y','y']],
@@ -3218,6 +3258,7 @@ class Interpreter:
               ['eval',[self.execEval,0,1]],
               ['getTime',[self.execGetTime,'number',0]],
               ['getZakOut',[self.execGetZakOut,'list',2]],
+              ['setTime',[self.execSetTime,'',1]],
               ['silence',[self.execSilence,'pattern',1]],
               ['tempo',[self.execTempo,'',1]],
               ['transposeNote',[self.execTranspose,'string',2]],
@@ -3233,6 +3274,11 @@ class Interpreter:
             return self.song.getActualTime(instrument)
         else:
             return 0
+
+    def execSetTime(self,time):
+        instrument=self.env 
+        if self.isInstrument(instrument):
+            self.song.setActualTime(instrument,time)
     
     def execGetZakOut(self,instrument,n):
         for instru in self.song.orchestra.instruments:     
