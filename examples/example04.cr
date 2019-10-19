@@ -59,7 +59,7 @@ endinstrument
    mixer[0]<<Fm  //it's Fm[0] by default
 
 #score
-  f1=ftgen(0,1024,10,1)
+  ftgen(1,0,1024,10,1)
   tempo(120)
 
   Fm:

@@ -31,8 +31,8 @@
               return '/gdur {}, dens {}/'.format(gdur,gdens)
           enddefine
 
-          f1=ftgen( 0,16384,20,2,1)
-          f2=ftgen( 0 1024 10 1 0 .5 0 .33 0 .25 0 .2 0 .167)
+          ftgen(1, 0,16384,20,2,1)
+          ftgen(2, 0 1024 10 1 0 .5 0 .33 0 .25 0 .2 0 .167)
 
           notes=/freq c7 e6 b f    a g a f    e c7 d a6    g a d7 g/
           pattern=|1,16,'*'*16| 

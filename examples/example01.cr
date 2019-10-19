@@ -75,7 +75,7 @@
         << |l,1,'*'|^7 + /vol -19/ + /freq d4 d5 a c6 d f d7/+/pan 0 > 1/
         |< |l,4,'*__*'|  + /vol -1/ + /freq d3 d3-/  // bass movement toward the next chord
         << |10,1,'*'|^7 + /vol -19 > -60/ + /freq c4 c5 g b c6 d c7/ +/pan 0.2 > 1/
-        |< |10,4,'****'|  + /vol -1/ + /freq c5.5 c.3 c.1 c/  //microtonality
+        |< (|10,8,'********'|  + /freq c5.9 c5.8 c5.7 c5.6 c.5 c.3 c.1 c/) * /vol -1 > -10/ //microtonality 
 
     piano:
 
