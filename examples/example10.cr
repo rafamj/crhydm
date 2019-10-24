@@ -230,8 +230,8 @@
     x=p3/8
     padd=linseg(0.1,x,0.9,x,0.1,x,0.9,x,0.1,x,0.9,x,0.1,x,0.9,x,0.5)
 
-    mr=vFm*pFm*fmr+vg*pg*gr+vsct*psct*sctr+vadd*add*padd
-    ml=vFm*(1-pFm)*fml+vg*(1-pg)*gl+vsct*(1-psct)*sctl+vadd*add*(1-padd)
+    a:mr=vFm*pFm*fmr+vg*pg*gr+vsct*psct*sctr+vadd*add*padd
+    a:ml=vFm*(1-pFm)*fml+vg*(1-pg)*gl+vsct*(1-psct)*sctl+vadd*add*(1-padd)
     outs(mr*vol,ml*vol)
 
 endinstrument
