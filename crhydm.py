@@ -304,7 +304,7 @@ class Score:
             else:
                 if type(p).__name__=='Pattern':
                     v=p.asList(instr)
-                    l.append(p.dur) #pusht the dur in order to calculate the total lenght later
+                    l.append(p.dur) #push the dur in order to calculate the total lenght later
                     l.append(v)
                 else:
                     l.append(p)
@@ -659,7 +659,7 @@ class Pattern:
         pat=copy.deepcopy(self.pattern) #copy of the patterns
         mainPat=pat.pop(0) #here are the main patterns
         res=[]
-        for i in range(len(mainPat)): #problems with python
+        for i in range(len(mainPat)):
             res.append([])
         parts=[0] * len(mainPat)
         t=[0] *len(mainPat)
@@ -709,9 +709,29 @@ class Pattern:
             i=i+1
                             
         resul=[]
-        for r in res:        
-            for l in r:
-                resul.append(l)       
+           
+        res1=[]    
+        for r in res:
+            r1=[]
+            j=-1
+            for i in range(0,len(r)):
+                if r[i][0]==PROL_CHAR:
+                    if i>0:
+                        r1[-1][1] = str(float(r1[-1][1])+float(r[i][1]))
+                    else:
+                        r1.append(r[i])
+                else:
+               #don't delete SILENCE here, in case the first note is a silence__
+                    r1.append(r[i])
+            res1.append(r1)
+                     
+        res=res1
+                
+        while len(res[0])>0:
+            for r in res:   
+                e=r.pop(0)   
+                if e[0]!=SILENCE_CHAR:
+                    resul.append(e)       
         return resul
 
 class Song:
@@ -1191,6 +1211,7 @@ class Interpreter:
                                         print(';;output ' +  self.printSymbol(o[0],par,name) + ' in ' + insOrigin + ' not connected.')
                                     else:
                                         text += s
+                                        t=self.printType(t)
                                         text +='=z' + t +'r('
                                         text += str(o[2])
                                         text +=')\n'
@@ -1276,7 +1297,7 @@ class Interpreter:
         return text
 
     def oldStyle(self, f):
-        return f in ['tablei','init','loscil','loscil3','min']
+        return f in ['tablei','init','loscil','loscil3','min','max']
         
     def getParNumber(self,params,p): #the instrument has not been created yet
         try:
@@ -1981,9 +2002,9 @@ class Interpreter:
                 v1.append(v2)
                 v1.extend('*')
                 return v1,'pattern'
-            if t2=='string':
-                v1[0].pattern[0].append(v2)
-                return v1,'pattern'
+            #if t2=='string':
+            #    v1[0].pattern[0].append(v2)
+            #    return v1,'pattern'
         elif t1=='string':
             if t2=='number':
                 return v1*int(v2),'string'
@@ -2098,8 +2119,8 @@ class Interpreter:
         if t==pt:
             return
         if type(value)==list:
-            for v in value:
-                self.adaptParameterType(v,t,pt)
+            #for v in value:
+            #    self.adaptParameterType(v,t,pt)
             return
         elif type(value).__name__=='tuple':
             self.adaptParameterType(value[0],value[1],pt)
@@ -3195,6 +3216,7 @@ class Interpreter:
             ['int',['y','y']],
             ['init',['y','y']],
             ['ftlen',['i','i']],
+            ['max',['y','y'*100]],
             ['min',['y','y'*100]],
             ['octave',['y','y']],
             ['release',['k','']],
@@ -3231,10 +3253,13 @@ class Interpreter:
             ['foscili',['a','xkxxkii']],
             ['grain',['a','xxxkkkiiii']], 
             ['grain3',['a','kkkkkkikikkii']],
+            ['hsboscil',['a','kkkiiiii']],
+            ['lfo',['B','kki']],
             ['line',['B','iii']],
             ['linseg',['B','iiii']],
             ['loscil',['a','xkiiiiiiii']],
             ['loscil3',['a','xkiiiiiiii']],
+            ['lowpass2',['a','akki']],
             ['madsr',['B','iiiiii']],
             ['midiout',['_','kkkk']],
             ['midion',['_','kkk']],
@@ -3265,17 +3290,21 @@ class Interpreter:
             ['pvsmaska',['f','fik']], 
             ['pvsynth',['a','fi']], 
             ['rand',['B','xiii']],
+            ['repluck',['a','ikikka']],
             ['reson',['a','axxi']],
             ['rezzy',['a','axxii']],
             ['reverb',['a','aki']],
             ['scantable',['a','kkiiii']],
             ['seed',['_','i']],
             ['sum',['a','aaaa']],
+            ['STKBowed',['a','iikkkkkkkkkk']],
             ['table',['y','yiiii']],
             ['tablei',['y','yiiii']],
             ['table3',['y','yiiii']],
             ['tival',['i','']],
             ['turnoff',['_','']],
+            ['wgpluck',['a','iikiiia']],
+            ['wgpluck2',['a','ikikk']],
             ['vco',['a','xxikiiiiii']], 
             ['vco2',['a','kkikki']],
             ['vco2init',['i','iiiiii']],
