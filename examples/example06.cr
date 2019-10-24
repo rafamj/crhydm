@@ -3,65 +3,102 @@
   nchnls = 2
   0dbfs = 1
 
-  instrument Bass vol freq: pan
-    env=linseg(0,0.1,1,p3-0.2,1,0.1,0)
-    sig=pluck(ampdbfs(vol),freq,freq*10,0,1)
-    outs(sig*pan*env,sig*(1-pan)*env)
+  instrument String vol freq: pan
+    envf=linseg(freq*3,p3/4,freq*2,3*p3/4,freq)
+    nd=line(4,p3,1)
+    env=linseg(0,0.05,1,p3-0.3,1,0.1,0)
+    sig=wgbow(ampdbfs(vol),freq,1,0.127236,0,0)
+    sig=butterlp(sig,envf)
+    outs(2*sig*pan*env,2*sig*(1-pan)*env)
   endinstrument
 
+  instrument Drone vol freq:
+      sine=ftgen(0, 0, 65536, 10, 1)
+      ioctfn=ftgen(0, 0,  1024,  -19,  1,  0.5,  270,  0,   2.5, 0.1, 0, 0,  4, 0.1, 0, 0)
+
+      nd=2*(2+oscil(0.2,0.25,-1) + oscil(0.3,0.31,-1,-1)+ oscil(0.2,0.11,-1,-1))
+      
+      sig1=foscil(ampdbfs(vol),freq,4,1,nd,sine,-1)
+      brill=1.5+oscil(0.2,0.22,-1,-1)+oscil(0.3,0.31,-1,-1)+oscil(0.2,0.15,-1,-1)+ oscil(1,0.51,-1,-1) + oscil(0.1,0.32,-1,-1)
+      k:f= 1+oscil(0.3,0.5,-1,-1) + oscil(0.2,0.3,-1,-1)+oscil(0.13,0.24,-1,-1) + oscil(0.26,0.21,-1,-1)
+      sig2=hsboscil(ampdbfs(vol),f*freq,brill,freq,sine,ioctfn,3,-1)
+      k:pan=oscil(1,freq/400,-1,-1)
+      outs((sig1+sig2*0.4)*pan,(sig1*0.8+sig2*0.6)*(1-pan))
+  endinstrument
+
+  instrument Synth vol freq: nh
+      sine=ftgen(0, 0, 65536, 10, 1)
+      curve=ftgen(0,0,257,9, .5,1,270,1.5,.33,90,2.5,.2,270,3.5,.143,90,4.5,.111,270)
+
+      env=adsr(0.1,0.4,0.6,0)
+      dis=linseg(0,0.2,0.2,p3/2-0.2,0,p3/2,1)
+      sig=buzz(ampdbfs(vol),freq,nh,sine)
+      sig=distort(sig, dis, curve)
+      outs(sig*env,sig*env)
+  endinstrument
 
 #score
+     define listVar tr(l,n):
+         for i in range(1,len(l)):
+             l[i]=inter.execTranspose(l[i],n)
+         return l
+     enddefine
 
-    //defined functions have python syntax, but have to declare return value (string, number, list, void)
-    
+  String:
+       define list gC(root,type): #0 major 1 minor 2 dominant 3 mb5
+         root=root[0]
+         if type==0 or type==2:
+             third=inter.execTranspose(root,4)  #inter.execTranspose is a function defined in the interpreter
+         else:
+             third=inter.execTranspose(root,3)
+
+         if type==3:
+             fifth=inter.execTranspose(root,6)
+         else:
+             fifth=inter.execTranspose(root,7)
+
+         if type==0:
+             seventh=inter.execTranspose(root,11)
+         else:
+             seventh=inter.execTranspose(root,10)
+
+         bassRoot=inter.execTranspose(root,-12)
+         bassFifth=inter.execTranspose(fifth,-12)
+         t=inter.execTranspose(third,12)
+         #return ['list',[ ['string',root],['string',third],['string',fifth],['string', seventh],['string', bassRoot],['string', bassFifth]]] #types inside a list must be defined 
+         return ['list',[ ['string',root],['string',third],['string',fifth]]]
+     enddefine
 
 
-      //in functions called from within a pattern, the first argument is the actual value 
-      //and the second argument is a number between 0 and 1 that indicates the point in time inside the pattern
-      define string vary(v, g, q):
-          return str(float(v) * q)
-      enddefine
+  pattern=|2,16,'*___*__*__*_*_*_'|^3 + /vol 1, pan 0.5/
+  notes=/freq/
+  notes +='freq':gC({c6},0) + 'freq':gC({c6},0)+'freq':gC({c6},0)+'freq':gC({d6},1)+ 'freq':gC({c6},0)+'freq':gC({d6},1)+'freq':gC({d6},1)
+  for i = 1 to 10
+  <<(pattern + notes)*4
+  notes=tr(notes,1)
+  endfor
+  <<|16,64,'*'*64|^4 + /vol -5, freq b6 d+7 f+ a+/
 
-
-      define string generate():
-           return 'a4 b_ c'
-           #return [ [ 4.08, 1] , [4.10, 2] ,[4.00, 1]]  #it's equivalent to the string 'a4 b_ c'
-#in general, types inside a list must be defined, although in some cases the line above would work
-           #return ['list',['list',['string', '4.08'], ['number', 1]]], ['list', [['string', '4.10'], ['number', 2]]], ['list', [['string', '4.00'], ['number', 1]]]
-      enddefine
-     
-
-      Bass:
-        aaa=['list',[ [ '4.08', 1] , ['4.10', 2] ,['4.00', 1]]]
-        pattern=|2,4,'freq':generate()| + /vol -15/   //the pattern is the return value of a function
-        //'pan'::vary(0.5) the ::  indicates that the function is called later
-        <<pattern * 'pan':[1,0] * 'pan'::vary(0.5)    // the function vary changes the values of the pattern
-        pattern=|2,8,'__x(**)__*'| + 'vol':'-20 ? -10'   // the ? indicates than this value is not changed
-        pattern += 'freq':{e5,  f} + ('freq':{g} + 'pan':[1,0])
-        <<pattern
-        <<pattern + 'freq':{?,  ?, g+}
-        <<pattern + 'freq':'e5  f g'
-        p=|4,8,'freq':'a4_ b c z a__'|
-        <<p
-        p=|4,8,'freq':{a4_, b, c, z, a__}|
-        <<p
-
-        <<p + 'pan':'0.5' 
-        p=|4,4,'freq':'a4_ b c'| + 'pan':[0]
-
-        pattern += 'freq':'e5  f g'
-
-        x='pan'
-        a=0.5
-        <<pattern 
-        pattern += 'freq':'e5 f g'
-        <<pattern * x:'1 0'
-        <<pattern * x:[1,0] * x::vary(a)
-        <<pattern * 'pan':[0,1] * 'pan'::vary(0.1) - /freq e5 d c/   // makes the 3 last notes e d c
-
-        var(10,14,'pan',0.01,1)  // ensure that there is a  value and not a '.'
-        var(10,14,'pan',vary(0.5))
-
+  Drone:
+    pattern=|8,1,'*'| + /vol -30/
+    notes=/freq c5/
+    for i = 1 to 10
+      <<pattern + notes
+      notes=tr(notes,1)
+    endfor
+    <<|16,1,'*'| + notes
+  Synth:
+    <<|8,16,/freq c7______ f_ f+ g z____/| + /vol -30/ + /nh 3/
+    <<|8,16,/freq z______ c7+_ f+ g+ z___ d7/| + /nh 4/
+    <<|8,16,/freq d7____ d7+ f_ f+ g z____/| + /nh 5/
+    <<|8,16,/freq z__ d7+___ a+_ b a+__ d+ e_/| + /nh 6/
+    <<|8,16,/freq e7________ b______ /| + /nh 7/
+    <<|8,16,/freq z_____ f_ f+ g z__ f__/| + /nh 8/
+    <<|8,16,/freq g7_____ b_ c8 d e__ g+__/| + /nh 9/
+    <<|8,16,/freq g+7______ c+9_ e f+ a+8____/| + /nh 10/
+    <<|8,16,/freq a7______ c9_ e f a8____/| + /nh 11/
+    <<|8,16,/freq a+7______ c+9_ f g+ a+8____/| + /nh 12/
+    <<|16,1,/freq b/| + /nh 13/
 #end
 options='-odac'
 

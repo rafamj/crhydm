@@ -100,7 +100,6 @@
 
         t1=getTime()
     drum:
-
         'a' > 'freq 80'
         'b' > 'freq 60'
 
@@ -117,8 +116,12 @@
 
         <<|4,16,'xxaxxxxxbbxxxxaa'| * 11
 
+
         setTime(400)
-        <<|4,16,'xxxxxxxxbxxxbxaa'| * 45
+        <<|4,16,'xxxxxxxxbxxxbxaa'| * 20
+         tempo(120)
+        <<|4,16,'xxxxxxxxbxxbaxxa'| * 25
+        tempo(100)
     bass:
         setTime(pad.t1)
         notes1='c5 a a   g c d f  e a  a  b a b g'
@@ -189,6 +192,6 @@
         ftgen(3,0,1024,7,0.1,(400/pad.end)*1024,0.9,(pad.end-400)/pad.end*1024,0.1)
 
         <<|pad.end,1,'*'| + /vol 1/ + /drp 2/ + /bp 3/
-#end
+#end 
 options = '-odac'
 

@@ -127,12 +127,10 @@
          else:
              seventh=inter.execTranspose(root,10)
 
-         bassRoot=inter.execTranspose(root,-12)
-         bassFifth=inter.execTranspose(fifth,-12)
-         return ['list',[ ['string',root],['string',third],['string',fifth],['string', seventh],['string', bassRoot],['string', bassFifth]]] #types inside a list must be defined 
+         return ['list',[ ['string',root],['string',third],['string',fifth],['string', seventh]]] #types inside a list must be defined 
      enddefine
 
-      pattern=|4,2,"*_"|^4 * '**' + /amp 0.1/  //4 note chord in parallel with 2 notes bass (pattern * string)
+      pattern=|4,1,"*"|^4  + /amp 0.1/  //4 note chord in parallel with 2 notes bass (pattern * string)
       
       for i=0 to (times-1)/8
           <<pattern + 'freq':generateChord({a6},1)
