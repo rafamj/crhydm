@@ -449,11 +449,16 @@ class Score:
                         break 
     
     def joinList(self,l):
-        if ',' in l:
-            r=self.joinList(l[0]) + self.joinList(l[2])
-            return r
-        else:
-            return [l]
+        res=[]
+        r=[]
+        for e in l:
+            if e==',':
+                res.append(r)
+                r=[]
+            else:
+                r.append(e)
+        res.append(r)
+        return res
                     
     def translateValues(self,instr,l):
         if l[0]==-1:
@@ -489,12 +494,29 @@ class Score:
                 
     def insertString(self,instr,s):
         l=s.split()
+        n=len(instr.params)-1
+        if len(l)<n:
+            l = l + ['.']*(n-len(l))
+        elif len(l)>n:
+            l = l[0:n]
         for score  in self.list:
-            if score[0]==instr:
-                score.append(l)
+            if score[0]==instr.name:
+                if l[0]=='.':
+                    self.lastInsertion=self.getActualTime(instr.name)
+                    l[0]='0'
+                    incTime=float(l[1])
+                    self.insertLineInInstrument(instr,l)
+                    self.updateTime(instr,incTime)
+                else:
+                    score.append(l)
                 return
         #new instrument
-        self.list.append([instr, 0] + [l])
+        if l[0]=='.':
+            l[0]='0'
+            incTime=float(l[1])
+        else:
+            incTime=0
+        self.list.append([instr.name, incTime] + [l])
 
     def setTempo(self,instr,t):
         pos=0
@@ -730,8 +752,8 @@ class Pattern:
         while len(res[0])>0:
             for r in res:   
                 e=r.pop(0)   
-                if e[0]!=SILENCE_CHAR:
-                    resul.append(e)       
+                #if e[0]!=SILENCE_CHAR: #don't delete silence. It's needed to know the last time
+                resul.append(e)       
         return resul
 
 class Song:
@@ -1309,9 +1331,17 @@ class Interpreter:
         name,t=self.nextToken()
         newName,t=self.nextToken()
         parameters=[]
+        pitchPar=[]
+        midiPar=[]
         p,t=self.nextToken()
         while p!='\n':
-            parameters.append(p)
+            if p==':':
+                pitchPar.append(par)
+            elif p=='%':
+                midiPar.append(par)
+            else:
+               parameters.append(p)
+               par=p
             p,t=self.nextToken()
         for instrument in self.song.orchestra.instruments:
             if instrument.name==newName:
@@ -1320,6 +1350,8 @@ class Interpreter:
         for instrument in self.song.orchestra.instruments:
             if instrument.name==name:
                 instrument.name=newName
+                instrument.pitchPar=pitchPar
+                instrument.midiPar=midiPar
                 instrument.params=['p1','p2','p3'] + parameters
                 self.insertSymbol(newName,'instrument',[newName,instrument])
                 self.symbolTable[newName]={}
@@ -1513,7 +1545,7 @@ class Interpreter:
                 result.extend(self.readCommaSeparatedList())
                 return result
         else:
-            self.printError("identifier or '<<' expected")
+            self.printError("identifier or '<<' expected. Found "+token)
 
         while token==',': #multiple assignation
             token,t=self.nextToken()
@@ -1913,8 +1945,26 @@ class Interpreter:
                 if v1[1][0]==v2[1][0]: #same parameter (better sould be getValue)
                     return ['listVar',v1[1] + v2[1][1:]] , 'listVar'
                 else:
-                    res= ['listVar'] + [[v1] +  [[ 'string',',']] +  [v2]]
+                    #res= ['listVar'] + [[v1] +  [[ 'string',',']] +  [v2]]
+                    res=['listVar',v1[1] + [[ 'string',',']]  + v2[1]]
                     return res,'listVar'
+             elif t2=='number':
+                 par,t=self.getValue(v1[1][0])
+                 isPitch=self.isParPitch(par)
+                 i=1
+                 while i<len(v1[1]):
+                     val,t=self.getValue(v1[1][i])
+                     if val==',':
+                         i=i+1
+                         par,t=self.getValue(v1[1][i])
+                         isPitch=self.isParPitch(par)
+                     else:
+                         if isPitch:
+                             v1[1][i]=['string', self.execTranspose(val,v2)]
+                         else:
+                             v1[1][i]=[t, float(val)+v2]
+                     i=i+1
+                 return v1,'listVar'
         self.printError('types '+t1+' and '+t2+" can't be added")
 
 
@@ -2157,7 +2207,8 @@ class Interpreter:
             return '"' + value + '"', t
         elif t=='-':
             v,t=self.readValueOrchestra()
-            return '-' + v,t
+            #return '-' + v,t
+            return ['-1', '*', v],t
         elif t=='(':
             value,t=self.readExpression()
             v,ty=self.nextToken()
@@ -2555,7 +2606,11 @@ class Interpreter:
             self.song.insertPattern(instr[1][1],value)
             
         elif t=='string':
-            self.song.insertString(instr[1][0],value)
+            self.song.insertString(instr[1][1],value)
+        else:
+            self.printError('error inserting pattern. Wrong type')
+
+
 
     def insertParallelPattern(self,value,t):
         #value=self.getListValue(value)
@@ -2565,10 +2620,9 @@ class Interpreter:
                 if type(p).__name__=='Pattern':
                     self.insertTranslations(p)
             self.song.insertParallelPattern(instr[1][1],value)
-            
-        elif t=='string':
-            self.song.insertString(instr[1][0],value)
-
+        else:
+            self.printError('error inserting pattern. Wrong type')    
+        
     def isInstrument(self,name):
         e=self.env
         self.env='general' #in case there is a local variable or the same name
@@ -3219,11 +3273,14 @@ class Interpreter:
             ['max',['y','y'*100]],
             ['min',['y','y'*100]],
             ['octave',['y','y']],
+            ['pow',['y','yKi']],
             ['release',['k','']],
             ['sqrt',['y','y']],
         
             ['adsr',['B','iiiii']],
             ['adsyn',['a','kkki']],
+            ['adsynt',['a','kkiiiii']],
+            ['adsynt2',['a','kkiiiii']],
             ['ampmidi',['i','ii']],
             ['biquad',['a','akkkkkki']],
             ['bqrez',['a','axxi']],
@@ -3235,6 +3292,7 @@ class Interpreter:
             ['comb',['a','akiii']],
             ['cpsmidi',['i','']],
             ['cpsmidinn',['i','K']],
+            ['dcblock',['a','ai']],
             ['dcblock2',['a','aii']],
             ['diskin2',['a','ikiiiiii']],
             ['distort',['a','akiii']],
@@ -3254,9 +3312,11 @@ class Interpreter:
             ['grain',['a','xxxkkkiiii']], 
             ['grain3',['a','kkkkkkikikkii']],
             ['hsboscil',['a','kkkiiiii']],
+            ['ihold',['x','']],
             ['lfo',['B','kki']],
             ['line',['B','iii']],
             ['linseg',['B','iiii']],
+            ['linrand',['x','k']],
             ['loscil',['a','xkiiiiiiii']],
             ['loscil3',['a','xkiiiiiiii']],
             ['lowpass2',['a','akki']],
@@ -3282,10 +3342,12 @@ class Interpreter:
             ['outs',['_','aa']],
             ['pan2',['a','axi']], 
             ['phasor',['B','xxi']], 
+            ['phasorbnk',['B','ykii']], 
             ['pluck',['a','kkiiiii']], 
             ['poscil',['a','BBii']], ### return type?
             ['powershape',['a','aki']],
             ['print',['_','i']], 
+            ['printk',['_','iki']], 
             ['pvsanal',['f','aiiiiii']], 
             ['pvsmaska',['f','fik']], 
             ['pvsynth',['a','fi']], 
@@ -3300,6 +3362,8 @@ class Interpreter:
             ['STKBowed',['a','iikkkkkkkkkk']],
             ['table',['y','yiiii']],
             ['tablei',['y','yiiii']],
+            ['tableiw',['_','iiiiii']],
+            ['tablew',['_','xxiiii']],
             ['table3',['y','yiiii']],
             ['tival',['i','']],
             ['turnoff',['_','']],
@@ -3312,6 +3376,7 @@ class Interpreter:
             ['vibr',['k','kki']],
             ['vibrato',['k','kkkkkkkkii']],
             ['wgbow',['a','kkkkkkii']],
+            ['wterrain',['a','kkkkkkii']],
             ['xadsr',['B','iiiiii']],
             ['zacl',['_','kk']],
             ['zar',['a','k']],
