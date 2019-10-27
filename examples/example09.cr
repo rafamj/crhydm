@@ -47,7 +47,27 @@ aynm2 init 0
   outs ipan*aout,(1-ipan)*aout
 endin
 
-rename 1 Synth amp note fqc rez tabl1 pan
+rename 1 Synth amp note: fqc rez tabl1 pan
+
+
+  instrument pad vol+ freq: init
+    tabx=ftgen(0,0,4096,10,  1,0.6,0.3,0.2,0.1)
+    taby=ftgen(0,0,4096,10,  1,0.3,0.2,0.1)
+
+    if init==0 igoto end
+
+    cx=lfo(0.25,freq/9000)+lfo(0.2,freq/10000)+oscil(0.001,0.1)
+    cy=lfo(0.2,freq/6000)+lfo(0.15,freq/7000)+lfo(0.001,0.2)
+    rx=lfo(0.5,freq/5000)+lfo(0.02,0.05)
+    ry=lfo(0.2,freq/7500)+lfo(0.05,0.01)
+      sig1=wterrain(ampdbfs(vol),freq,cy,cx,rx,ry,tabx,taby)
+      sig2=wterrain(ampdbfs(vol),freq,cx,cy,ry,rx,tabx,taby)
+      sig1=0.2*dcblock(sig1)
+      sig2=0.2*dcblock(sig2)
+      outs(sig1,sig2)
+    end:
+  endinstrument
+
 
 #score
 ftgen(1, 0, 1024, 10, 1)
@@ -60,40 +80,52 @@ ftgen(6, 0,  8192,   7,   0, 2048,  0,   0, -1, 2048, -1, 0, 1, 2048, 1, 0, 0, 2
 ; Distortion Table
 ftgen(7, 0, 1024,   8, -.8, 42, -.78,  400, -.7, 140, .7,  400, .78, 42, .8)
 
-    tempo(120)
+
     Drum:
         'a'>'vol 0.4 freq 80'
-	'b'>'vol 0.5 freq 65'
+        'b'>'vol 0.5 freq 65'
         'l'>'pan 0.2'
-	'r'>'pan 0.8'
+        'r'>'pan 0.8'
 
         pattern=|4,16,'xxxxxxaaxxxbbxaa'| + 'xxxxxxllxxxrrxll'
+        <<silence(30) 
+        <<(pattern + silence(26)) * 10
 
-        <<pattern * 16
+
+
+    pad:
+      pattern=|30,2,'**'|^4
+      notes=/freq g6 c7 e a      a6 d7 f b a/
+      vol=/vol -25 /
+      pattern +=notes + vol
+      <<pattern + /init 1 1 1 1 0/ 
+      <<pattern * 10
+      <<(pattern + notes) + /vol -25 > -30 . . . -30 > -60/
 
     Synth:
-        pattern=|4,16,'*_____xx*____xxx'| + 'amp':[0.1] + 'rez':[30] + 'tabl1':[3] + 'fqc':[90]
-	pattern1 = pattern + 'note':{c7, d}  + /tabl1 1/
-	pattern2 = pattern + 'note':{e, d}   + /tabl1 2/
-	pattern3 = pattern + 'note':{d, c} + /tabl1 3/
-	pattern4 = pattern + 'note':{d, e} + /tabl1 4/
-	pattern5 = pattern + 'note':{e, f} + /tabl1 5/
-	pattern6 = pattern + 'note':{f, e} + /tabl1 6/
-	pattern7 = pattern + 'note':{e, d} + /tabl1 7/
-	pattern8 = pattern + 'note':{d, f} + /tabl1 4/
-	pattern9 = pattern + 'note':{e, c} + /tabl1 3/
-	pattern10 = pattern + 'note':{f, c} + /tabl1 1/
+      
+      <<silence(30)
+      <<|30,16,/note g5_________ a b____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note d5_________ b a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g5_________ a d____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note a5_________ g a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g5_________ g a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g5_________ b a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note d5_________ a b____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g5_________ d a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note a5_________ a g____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g5_________ a g____/| +  'tabl1':[random.randint(1,6)]
 
-    
-	<<pattern1+pattern2+pattern3+pattern4+pattern5+pattern6+pattern7+pattern8+pattern9+pattern10
-	<<pattern1+pattern3+pattern10+pattern1+pattern2+pattern3+pattern7+pattern5+pattern3+pattern2
-	<<pattern1+pattern6+pattern3+pattern9+pattern5+pattern6+pattern3+pattern5+pattern2+pattern1
         t=getTime()
 
-        var(0,t,'rez',10,90) 
-        var(0,60,'amp',0.1,0.005)
-        var(60,t,'amp',0.1,0.01)
-        put(0,'pan',[0.5])
-        put(t/2,'pan',[0,1,0,1,0.5])
-#end 
-options='  -odac'
+        var(0,t,'rez',1,100)
+        var(t/2,t,'amp',0.1,0.01)
+        var(0,t,'fqc',50,100)
+
+        put(0,'pan',[0.4])
+        put(0,'amp',[0.05])
+        put(t/2,'pan',[0,1,0,1,0.6])
+
+#end
+options='-odac'
+

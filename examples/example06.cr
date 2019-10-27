@@ -38,12 +38,6 @@
   endinstrument
 
 #score
-     define listVar tr(l,n):
-         for i in range(1,len(l)):
-             l[i]=inter.execTranspose(l[i],n)
-         return l
-     enddefine
-
   String:
        define list gC(root,type): #0 major 1 minor 2 dominant 3 mb5
          root=root[0]
@@ -75,7 +69,7 @@
   notes +='freq':gC({c6},0) + 'freq':gC({c6},0)+'freq':gC({c6},0)+'freq':gC({d6},1)+ 'freq':gC({c6},0)+'freq':gC({d6},1)+'freq':gC({d6},1)
   for i = 1 to 10
   <<(pattern + notes)*4
-  notes=tr(notes,1)
+  notes += 1
   endfor
   <<|16,64,'*'*64|^4 + /vol -5, freq b6 d+7 f+ a+/
 
@@ -84,7 +78,7 @@
     notes=/freq c5/
     for i = 1 to 10
       <<pattern + notes
-      notes=tr(notes,1)
+      notes +=1
     endfor
     <<|16,1,'*'| + notes
   Synth:
