@@ -44,9 +44,10 @@
           endfor
 #orchestra
 
+  t=ftgen(0,0,2048, 10, 1)
+
   instrument Fm amp freq: car mod index
 
-      t=ftgen(0,0,2048, 10, 1)
          
       env=linseg(0, 0.02, 1,p3-0.02, 0)
       sig=foscili(amp, freq, car, mod, index, t)
@@ -91,19 +92,20 @@
           var(0,t,'car',1,3)         
 #orchestra
 
-  instrument scanTable amp freq:
-
     pos=  ftgen(0, 0, 128, 10, 1);Initial Shape, sine wave range -1 to 1
     mass= ftgen(0, 0, 128, -7, 1, 128, 1) ;Masses(adj.), constant value 1
     stiff=ftgen(0, 0, 128, -7, 50, 64, 100, 64, 0) ;Stiffness; unipolar triangle range 0 to 100
     damp= ftgen(0, 0, 128, -7, 1, 128, 1) ;Damping; constant value 1
     vel=  ftgen(0, 0, 128, -7, 0, 128, 0) ;Initial Velocity; constant value 0
 
+
+  instrument scanTable amp freq:
+
     env=adsr(0.1,0.3,0.5,0.01)
     a0=scantable(amp, freq, pos, mass, stiff, damp, vel)
     a1=oscil3(amp, freq, pos)
-    a1=dcblock2(a1)
-    <<a1*env, a1*env
+    a1=dcblock2(a1)*env
+    <<a1, a1
   endinstrument
 
 #score
@@ -226,7 +228,7 @@
     pg=0.4 + oscil(0.2,20/p3)
     vsct=1
     psct=0.6
-    vadd=0.4
+    vadd=0.1
     x=p3/8
     padd=linseg(0.1,x,0.9,x,0.1,x,0.9,x,0.1,x,0.9,x,0.1,x,0.9,x,0.5)
 

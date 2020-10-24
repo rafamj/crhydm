@@ -7,8 +7,9 @@ swing demo using the parameters 4 and 5 when creating a pattern
   nchnls = 2
   0dbfs = 1
 
+tb=ftgen(0, 0, 16384, 10, 1)  // sine wave
+
 instrument Bass vol freq pan
-    tb=ftgen(0, 0, 16384, 10, 1)  // sine wave
     env=linseg(0, .02, 1, p3 - 0.04, 1, .02, 0)
     sig=buzz(ampdbfs(vol),cpspch(freq),8,tb)
     outs(env*sig*pan,env*sig*(1-pan))

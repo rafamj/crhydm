@@ -8,7 +8,7 @@ instrument MidiOut status chan data1 data2
         midiout(status,chan,data1,data2)
 endinstrument
 
-instrument Midi chan note vel
+instrument Midi chan note% vel  //% -> midi note
         midion(chan,note,vel)
 endinstrument
 
@@ -29,8 +29,8 @@ instrument Midi10=Midi
     //<<'0 1 192 10 10 0'
     
     Midi1:
-        pattern=|4,16,'****************'| + 'chan':[ 1] + 'vel':[100]
-        notes='note':{{ c5, d, e, a,     f, g, b, d6,        c, a5, g, e,      a, g, d, c}}  
+        pattern=|4,16,'****************'| + 'chan':[ 1] + 'vel':[127]
+        notes=/note c5 d e a     f g b d6        c a5 g e      a g d c/  
 
         <<(pattern+notes)*10
 
@@ -55,7 +55,7 @@ instrument Midi10=Midi
 
 #end
 
-options='-+rtmidi=alsaseq -Q20 -odac'
+options='-+rtmidi=alsaseq -Q128 -odac'
   //-odac
   //-odac  -Ma
   //-Q hw:1

@@ -14,9 +14,8 @@
     outs(env*sig*pan , env*sig*(1-pan))
   endinstrument
 
+  t1=ftgen(0,0,0,1,"drum.wav",0,0,0)
   instrument Drum amp freq
-    t1=ftgen(0,0,0,1,"drum.wav",0,0,0)
-
     sig=loscil(ampdbfs(amp),freq,t1,1,1)
     env=linseg(0, .02, 1, .02, 0)
     outs(sig*env,sig*env)
@@ -41,9 +40,10 @@
     << p1*n * 'cutoff':[80,300] * 'res':[0.8,0.99] * 'pan':[0,1]
 
   Drum:
-    'a' > 'freq 1'
-    'b' > 'freq 1.3'
-    <<|4,16,'axbaxabxaxxaxxbb'|*n + 'amp':[-13] 
+    'a' > 'freq 1 amp -13'
+    'b' > 'freq 1.3 amp -13'
+    'c' > 'amp +=2'
+    <<(|4,16,'axba xabx axxa xxbb'| + 'xxcx xxcx xxxx xxcx') * n
 #end
 //#end Synth
 //#end(0,4)Drum

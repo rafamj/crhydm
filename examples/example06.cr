@@ -12,23 +12,26 @@
     outs(2*sig*pan*env,2*sig*(1-pan)*env)
   endinstrument
 
-  instrument Drone vol freq:
-      sine=ftgen(0, 0, 65536, 10, 1)
-      ioctfn=ftgen(0, 0,  1024,  -19,  1,  0.5,  270,  0,   2.5, 0.1, 0, 0,  4, 0.1, 0, 0)
+  sine1=ftgen(0, 0, 65536, 10, 1)
 
-      nd=2*(2+oscil(0.2,0.25,-1) + oscil(0.3,0.31,-1,-1)+ oscil(0.2,0.11,-1,-1))
+  ioctfn=ftgen(0, 0,  1024,  -19,  1,  0.5,  270,  0,   2.5, 0.1, 0, 0,  4, 0.1, 0, 0)
+
+  instrument Drone vol freq:
+
+      k:nd=2*(2+oscil(0.2,0.25,-1) + oscil(0.3,0.31,-1,-1)+ oscil(0.2,0.11,-1,-1))
       
-      sig1=foscil(ampdbfs(vol),freq,4,1,nd,sine,-1)
-      brill=1.5+oscil(0.2,0.22,-1,-1)+oscil(0.3,0.31,-1,-1)+oscil(0.2,0.15,-1,-1)+ oscil(1,0.51,-1,-1) + oscil(0.1,0.32,-1,-1)
+      sig1=foscil(ampdbfs(vol),freq,4,1,nd,sine1,-1)
+      k:brill=1.5+oscil(0.2,0.22,-1,-1)+oscil(0.3,0.31,-1,-1)+oscil(0.2,0.15,-1,-1)+ oscil(1,0.51,-1,-1) + oscil(0.1,0.32,-1,-1)
       k:f= 1+oscil(0.3,0.5,-1,-1) + oscil(0.2,0.3,-1,-1)+oscil(0.13,0.24,-1,-1) + oscil(0.26,0.21,-1,-1)
-      sig2=hsboscil(ampdbfs(vol),f*freq,brill,freq,sine,ioctfn,3,-1)
+      sig2=hsboscil(ampdbfs(vol),f*freq,brill,freq,sine1,ioctfn,3,-1)
       k:pan=oscil(1,freq/400,-1,-1)
       outs((sig1+sig2*0.4)*pan,(sig1*0.8+sig2*0.6)*(1-pan))
   endinstrument
 
+  sine=ftgen(0, 0, 65536, 10, 1)
+  curve=ftgen(0,0,257,9, .5,1,270,1.5,.33,90,2.5,.2,270,3.5,.143,90,4.5,.111,270)
+
   instrument Synth vol freq: nh
-      sine=ftgen(0, 0, 65536, 10, 1)
-      curve=ftgen(0,0,257,9, .5,1,270,1.5,.33,90,2.5,.2,270,3.5,.143,90,4.5,.111,270)
 
       env=adsr(0.1,0.4,0.6,0)
       dis=linseg(0,0.2,0.2,p3/2-0.2,0,p3/2,1)

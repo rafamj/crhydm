@@ -4,13 +4,12 @@
   nchnls = 2
   0dbfs = 1
 
-  instrument Bass vol freq pan
+  instrument Bass vol freq: pan
     env=madsr(0.01,0.8,0.1,0.1)
-    fre=cpspch(freq)
-    sig1=vco2(0.1,fre,8)
-    sig=reson(sig1*0.0005,fre*1.1,fre/3)
-    sl,sr=pan2(ampdbfs(vol)*sig,pan)
-    outs(env*sl,env*sr)
+    sig1=vco2(0.1,freq,8)
+    sig=reson(sig1*0.0005,freq*1.1,freq/3)
+    sigl,sigr=pan2(ampdbfs(vol)*sig,pan)
+    outs(env*sigl,env*sigr)
   endinstrument
 
   instrument pad vol freq pan+
@@ -18,8 +17,8 @@
     sig=wgbow(ampdbfs(vol),cpspch(freq),3,0.2,vibf,0.1)
     ffreq=linseg(cpspch(freq)*3,0.8,cpspch(freq)*4,p3-0.2,cpspch(freq)*2)
     sig=butterlp(sig,ffreq)
-    sl,sr=pan2(sig,pan)
-    outs(sl,sr)
+    sigl,sigr=pan2(sig,pan)
+    outs(sigl,sigr)
   endinstrument
 
   instrument synth freq Amp1 Type1 PW1 Oct1 Tune1 Amp2 Type2 PW2 Oct2 Tune2 CF FA FD FS FR Res AA AD AS AR
@@ -34,7 +33,7 @@
 ;if type is sawtooth or square...
     if Type1==1||Type1==2 then
  ;...derive vco2 'mode' from waveform type
-        Mode1=(Type1==1?0:2)
+        i:Mode1=(Type1==1?0:2)
         Sig1=vco2(ampdbfs(Amp1),CPS*Oct1*Tune1,Mode1,PW1);VCO audio oscillator
     else                                   ;otherwise...
          Sig1=noise(ampdbfs(Amp1), 0.5)              ;...generate white noise
@@ -42,7 +41,7 @@
 
 ;oscillator 2 (identical in design to oscillator 1)
     if Type2==1||Type2==2 then
-        Mode2=(Type2==1?0:2)
+        i:Mode2=(Type2==1?0:2)
         Sig2=vco2(ampdbfs(Amp2),CPS*Oct2*Tune2,Mode2,PW2)
     else
       Sig2=noise(ampdbfs(Amp2),0.5)
@@ -68,16 +67,16 @@
     Bass:
         pattern=|4,16,'****************'| * 'vol':[-12, '>' ,-10] * 'pan':[0, '>', 1, 1,'>', 0]
 
-	notes1='freq':{ c6, e, g, a, g,  f, e, a, d, b, g, c7, d,  d-, a6, g, f, d+}
-	notes2='freq':{ g6, a, b, d, g-, e-, f, d, b-, g-, d7, e,  f, g6, a, g, b+}
-	notes3='freq':{ d6, e, g, a-, g, e-, a, d, a, f, c7, e, a6, g-, f, f+}
-	notes4='freq':{ g6, a-, b-,  b, d, f-, d-, g, d, b-, g-, e7, a, g6, b, g, b+}
-	notes5='freq':{ c6+, e-, f, b-, g+, f, a, d, c, g+, c7, e, a6, f, g, a+}
-	notes6='freq':{ f6, a+, b, d, g-, e-, f, d, b-, g-, d7, e-, g6, a-, e-, b+}
-	notes7='freq':{ c6, d, f, g, g+, f, a, d, b, f, c7, a, a6, g, b, f+}
-	notes8='freq':{ g6, a, b-, d, f, e, f, d, b, g-, d7, f, e, g6, g, f, b+}
-	notes9='freq':{ d6, e-, g+, a-, g, e, b, d+, a, f, c7, d-, a6, g+, g, f+}
-	notes10='freq':{ g6+, a+, b, d-, g-, e-, f, d, b-, g-, d7, e+, g6, a, g, b+}
+	notes1=/freq c6 e g a g  f e a d b g c7 d  d- a6 g f d+/
+	notes2=/freq g6 a b d g- e- f d b- g- d7 e  f g6 a g b+/
+	notes3=/freq d6 e g a- g e- a d a f c7 e a6 g- f f+/
+	notes4=/freq g6 a- b-  b d f- d- g d b- g- e7 a g6 b g b+/
+	notes5=/freq c6+ e- f b- g+ f a d c g+ c7 e a6 f g a+/
+	notes6=/freq f6 a+ b d g- e- f d b- g- d7 e- g6 a- e- b+/
+	notes7=/freq c6 d f g g+ f a d b f c7 a a6 g b f+/
+	notes8=/freq g6 a b- d f e f d b g- d7 f e g6 g f b+/
+	notes9=/freq d6 e- g+ a- g e b d+ a f c7 d- a6 g+ g f+/
+	notes10=/freq g6+ a+ b d- g- e- f d b- g- d7 e+ g6 a g b+/
     
         pat=pattern+notes1
         pat+=pattern+notes2

@@ -49,15 +49,15 @@ endin
 
 rename 1 Synth amp note: fqc rez tabl1 pan
 
+ tabx=ftgen(0,0,4096,10,  1,0.6,0.3,0.2,0.1)
+ taby=ftgen(0,0,4096,10,  1,0.3,0.2,0.1)
 
   instrument pad vol+ freq: init
-    tabx=ftgen(0,0,4096,10,  1,0.6,0.3,0.2,0.1)
-    taby=ftgen(0,0,4096,10,  1,0.3,0.2,0.1)
 
     if init==0 igoto end
 
-    cx=lfo(0.25,freq/9000)+lfo(0.2,freq/10000)+oscil(0.001,0.1)
-    cy=lfo(0.2,freq/6000)+lfo(0.15,freq/7000)+lfo(0.001,0.2)
+    k:cx=lfo(0.25,freq/9000)+lfo(0.2,freq/10000)+oscil(0.001,0.1)
+    k:cy=lfo(0.2,freq/6000)+lfo(0.15,freq/7000)+lfo(0.001,0.2)
     rx=lfo(0.5,freq/5000)+lfo(0.02,0.05)
     ry=lfo(0.2,freq/7500)+lfo(0.05,0.01)
       sig1=wterrain(ampdbfs(vol),freq,cy,cx,rx,ry,tabx,taby)
@@ -123,7 +123,7 @@ ftgen(7, 0, 1024,   8, -.8, 42, -.78,  400, -.7, 140, .7,  400, .78, 42, .8)
         var(0,t,'fqc',50,100)
 
         put(0,'pan',[0.4])
-        put(0,'amp',[0.05])
+        put(0,'amp',[0.06])
         put(t/2,'pan',[0,1,0,1,0.6])
 
 #end

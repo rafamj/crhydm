@@ -3,36 +3,38 @@
   nchnls = 2
   0dbfs = 1
 
+  Tanh1=ftgen(0,0,257,"tanh",-1,1,0)
+  Tanh2=ftgen(0,0,257,"tanh",-2,2,0)
+
   instrument drum vol freq
-    Tanh=ftgen(0,0,257,"tanh",-1,1,0)
 
       dur=min(0.11,p3)
       env1=expon(1,dur,0.001)
       fr1=expon(freq,dur,freq/4)
       sig1=oscil(1,fr1)
       Amt=line(0,dur,0.5)
-      sig2=distort(sig1, Amt, Tanh)
+      sig2=distort(sig1, Amt, Tanh1)
       sig=sig2*env1  * ampdbfs(vol)
       <<sig
   endinstrument
 
   instrument bass vol freq:
-      Tanh=ftgen(0,0,257,"tanh",-2,2,0)
 
       env1=linseg(0,0.1,1,p3-0.1,0)
       sig1=oscil(1,freq)
       sig2=oscil(1,freq*2.1)
       Amt1=line(1,p3,0.5)
-      sig1=distort(sig1, Amt1, Tanh)
+      sig1=distort(sig1, Amt1, Tanh2)
       Amt2=line(0,p3,0.5)
-      sig2=distort(sig2, Amt2, Tanh)
-      sig=(sig1+sig2*0.5)*env1  * ampdbfs(vol)
+      sig2=distort(sig2, Amt2, Tanh2)
+      a:sig=(sig1+sig2*0.5)*env1  * ampdbfs(vol)
       <<sig
 
   endinstrument
 
+  sine=ftgen(0, 0, 16384, 10, 1)
+
   instrument pad vol freq: car mod ndx
-      sine=ftgen(0, 0, 16384, 10, 1)
       env=linseg(0,0.1,1,p3-0.2,1,0.1,0)    
       nd=linseg(0,p3/2,ndx,p3/2,0)
       v1=vibr(0.1,1,sine)
@@ -65,7 +67,7 @@
   sigl=druml+bassl+padl
   sigr=drumr+bassr+padr
 
-  outs(sigl*v,sigr*v)
+  outs(2.2*sigl*v,2.2*sigr*v)
 
   endinstrument
 
