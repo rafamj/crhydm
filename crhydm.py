@@ -91,16 +91,12 @@ class Orchestra:
         self.instruments=[]
         self.opcodes=[]
         self.globalSection=[]
-        self.globalFunctions=[]
         self.globalText=''
         self.zakNumbera=0
         self.zakNumberk=0
 
     def insertGlobal(self,g):
         self.globalSection +=g
-
-    def insertGlobalFunction(self,f):
-        self.globalFunctions +=f
 
     def insertInstrument(self,instr):
         self.instruments.append(instr)
@@ -669,7 +665,20 @@ class Pattern:
                         else:
                             parN=instr.getPositionOfParameter(t[0])-1
                             if parN>=0:
-                                line[parN]=t[1]
+                                if len(t[1])>2 and t[1][1]=='=' and t[1][0] in ['+','-','*','/']:
+                                    if t[1][0] == '+':
+                                        line[parN]=str(float(line[parN]) + float(t[1][2:]))
+                                    elif t[1][0] == '-':
+                                        line[parN]=str(float(line[parN]) - float(t[1][2:]))
+                                    elif t[1][0] == '*':
+                                        line[parN]=str(float(line[parN]) * float(t[1][2:]))
+                                    elif t[1][0] == '/':
+                                        line[parN]=str(float(line[parN]) / float(t[1][2:]))
+                                    else:
+                                        print('error in pattern', p,t[1])
+                                        exit()
+                                else:
+                                    line[parN]=t[1]
                             else:
                                 print('unknown parameter ' + t[0])
                                 exit()
@@ -771,9 +780,6 @@ class Song:
 
     def insertGlobal(self,g):
         self.orchestra.insertGlobal(g)
-
-    def insertGlobalFunction(self,f):
-        self.orchestra.insertGlobalFunction(f)
 
     def insertScoreFunction(self,f):
         self.score.insertFunction(f)
@@ -1146,7 +1152,7 @@ class Interpreter:
                             text +=s
                         except ValueError:
                             t,v=self.getSymbol(s)
-                            if t=='orcFunction' or t=='instrument' or s=='p3':
+                            if t=='orcFunction' or t=='instrument' or s=='p3' or t=='reserved':
                                 t=''
                             #if v=='global table':
                             #    s=instrName + '_' +s
@@ -1159,6 +1165,10 @@ class Interpreter:
                             elif t=='l':
                                 t=''
                                 s=v
+                            if v=='global' or v=='multi global' :
+                                t = 'g'+t
+                            #elif v=='function':
+                            #    t=''
                             t=self.printType(t)    
                             text += t + s 
         return text        
@@ -1291,8 +1301,10 @@ class Interpreter:
                     text+=self.printCl(inputsAtoClear,'a')
                     text+=self.printCl(inputsKtoClear,'k')
             else: # normal instruction
-                t,v=self.getSymbol(l[0])
-                if len(l)>1 and (self.oldStyle(l[-1][0]) or  l[1]==',' or v=='multi'): #complicated and prone to error
+                l0=l[0]
+                l1=l[-1][0]
+                t,v=self.getSymbol(l0)
+                if len(l)>1 and (self.oldStyle(l1) or  l[1]==',' or v=='multi' or v=='multi global'): #complicated and prone to error
                     l[-2]=' '         # delete the = sign and the parenthesis
                     l[-1][1]=' '
                     l[-1][-1]=' '
@@ -1319,7 +1331,7 @@ class Interpreter:
         return text
 
     def oldStyle(self, f):
-        return f in ['tablei','init','loscil','loscil3','min','max']
+        return f in ['tablei','init','loscil','loscil3','min','max','tableikt']
         
     def getParNumber(self,params,p): #the instrument has not been created yet
         try:
@@ -1362,6 +1374,10 @@ class Interpreter:
 
     def readOrchestraLine(self):
         token,t=self.nextToken()
+        result=self.probeForConditional(token)
+        if result!=0:
+            return result
+            
         if token=='0': # 0dbfs
             tok,t=self.nextToken()
             if tok=='dbfs':
@@ -1394,17 +1410,6 @@ class Interpreter:
         if token=='rename':
             self.renameInstrument()
             return ''
-        if token=='ftgen':
-           self.unread('ftgen')
-           value,t=self.readExpression()
-           r='f'
-           value.pop(0) # ftgen (
-           value.pop(0)
-           for i in range(len(value)):
-               if value[i] not in [',',')']:
-                   r += ' ' +str(value[i]) 
-           self.song.insertScoreFunction(r)
-           return ''
         if token=='reserveZak':
             self.expectToken(['('])
             valuea,t=self.readExpression()
@@ -1438,14 +1443,33 @@ class Interpreter:
                 if var!=',':
                     t1,v=self.getSymbol(var)
                     if t1=='':
-                        if self.env=='general':
+                        if self.env=='general': ######
                             if var not in ['sr','kr','nchnls','nchnls_i','0dbfs','ksmps']:
-                                self.insertSymbol(var,'g'+t,'')
+                                self.insertSymbol(var,t,'global')
+                            else:
+                                self.insertSymbol(var,'reserved','')
                         else:
-                            self.insertSymbol(var,t,'')
+                            self.insertSymbol(var,t,'global')
             result.append('=')
             #self.insertSymbol(var,t,'')
             result.append(value)
+        elif token=='[':
+            value,t=self.readExpression()
+            if value!=']': #input from zak system
+                self.expectToken([']'])
+            token,t=self.nextToken() #in case there is a subscript [n]
+            if t=='=': #assignation to array
+                #self.expectToken(['='])
+                result.append('[')
+                result.append(']')
+                result.append('=') #the same that with '='
+                val,t=self.readExpression()
+                t1,v=self.getSymbol(result[0])
+                t=self.printType(t)
+                self.insertSymbol(result[0],t,'multi global')
+                result.append(val)
+        elif token==':': #label
+            result[-1]=result[-1] + ':'
         else:
             self.printError("Syntax error. Assignation or call to function expected")
         return result    
@@ -1463,6 +1487,32 @@ class Interpreter:
         return rout,rin
         
     
+    def probeForConditional(self,token):
+        if token in ['if','while','until']:
+                result=[token]
+                token,t=self.nextToken()
+                while token not in ['then','goto','igoto','kgoto','do','\n']:
+                    result.append(token)
+                    token,t=self.nextToken()
+                if token=='\n':
+                    self.printError("then expected")
+                elif token=='then':
+                    result.append(' ')
+                    result.append(token)
+                    return result
+                else:
+                    result.append(' ')#####
+                    result.append(token)
+                    token,t=self.nextToken()
+                    result.append(token)
+                    return result
+        elif token in ['endif','od','else','elseif']:
+            return [token] ####
+        elif token in ['goto','igoto','kgoto','tigoto']:
+             tok,t=self.nextToken()
+             return [token, tok]
+        return 0
+        
     def readInstrumentLine(self,name):
         token,t=self.nextToken()
         if token=='#':
@@ -1484,40 +1534,9 @@ class Interpreter:
                 token,t=self.nextToken()
             return result
         elif t=='identifier':
-            if token in ['if','while','until']:
-                result=[token]
-                token,t=self.nextToken()
-                while token not in ['then','goto','igoto','kgoto','do','\n']:
-                    result.append(token)
-                    token,t=self.nextToken()
-                if token=='\n':
-                    self.printError("then expected")
-                elif token=='then':
-                    result.append(' ')
-                    result.append(token)
-                    return result
-                else:
-                    result.append(' ')#####
-                    result.append(token)
-                    token,t=self.nextToken()
-                    result.append(token)
-                    return result
-            elif token in ['endif','od','else','elseif']:
-                return [token] ####
-            elif token in ['goto','igoto','kgoto','tigoto']:
-                 tok,t=self.nextToken()
-                 return [token, tok]
-            elif token=='ftgen':
-               self.unread('ftgen')
-               value,t=self.readExpression()
-               r='f'
-               value.pop(0) # ftgen (
-               value.pop(0)
-               for i in range(len(value)):
-                   if value[i] not in [',',')']:
-                       r += ' ' +str(value[i]) 
-               self.song.insertScoreFunction(r)
-               return ''
+            result=self.probeForConditional(token)
+            if result!=0:
+                return result
             else:
                 tok,to=self.nextToken()
                 if tok==':':
@@ -1559,14 +1578,8 @@ class Interpreter:
                 if var!=',':
                     t1,v=self.getSymbol(var)
                     if t1=='':
-                        if value[0]=='ftgen' or t=='gi': #####
-                            t='gi'
-                            for i in range(len(result)):
-                                result[i] = t+name + '_' + result[i]
-                            self.song.insertGlobalFunction([result + ['='] + [value]])
-                            self.insertSymbol(var,t+ name + '_','')
-                        else:
-                            self.insertSymbol(var,t,'')
+                        self.insertSymbol(var,t[0],'')
+                        t=t[1:] #in case of a function returning several values
                         r.append(var)
                     elif t1=='p': #redefinition of parameter
                         r.append(v)
@@ -1575,16 +1588,18 @@ class Interpreter:
                         #else:
                         #    self.insertSymbol(var,t,'')
                         #t1,v=self.getSymbol(var)
-                    elif t1=='i':
+                    elif t1=='i' or t1=='reserved':
                         r.append(var)
                         self.insertSymbol(var,t,'')
+                    #elif t1=='reserved':
+                    #    self.printError('redefinition of reserved symbol ' +var+' not allowed')
                     else:
                         r.append(var)
                 else:
                     r.append(var)
                         
-            if t=='gi':
-                return ''
+            #if t=='gi':
+            #    return ''
             result=r
             result.append('=')
             result.append(value)
@@ -1603,18 +1618,18 @@ class Interpreter:
             result=value
         elif token=='[': 
             value,t=self.readExpression()
-            if t!=']': #input from zak system
+            if value!=']': #input from zak system
                 self.expectToken([']'])
             token,t=self.nextToken() #in case there is a subscript [n]
             if t=='=': #assignation to array
-                self.expectToken(['='])
+                #self.expectToken(['='])
                 result.append('[')
                 result.append(']')
                 result.append('=') #the same that with '='
                 val,t=self.readExpression()
-                t1,v=self.getSymbol(token1)
+                t1,v=self.getSymbol(result[0])
                 t=self.printType(t)
-                self.insertSymbol(token1,t,'multi')
+                self.insertSymbol(result[0],t,'multi')
                 result.append(val)
             elif t=='>>':  #input from zak system
                 result.append(value)
@@ -1795,11 +1810,6 @@ class Interpreter:
 
     
     def coerce(self,t1,t2):
-        if t1[0]=='g':
-            t1=t1[1:]
-        if t2[0]=='g':
-            t2=t2[1:]
- 
         if t1=='x':
             return 'x'
         if t2=='x':
@@ -2148,6 +2158,7 @@ class Interpreter:
 
     def readProduct(self):  # value { * value}*
         value,t=self.readValue()
+
         ch,cht=self.nextToken()
         while ch in ['*','/','%','^','&&','==','!=','>=','<=','<','>','?',':']:
             v,ty=self.readValue()
@@ -2165,25 +2176,43 @@ class Interpreter:
         self.unread(ch)  
         return value,t
 
+    def compareTypes(self,t,pt):
+        #if (t=='A' or t=='B') and (pt=='x' or pt=='y' or pt=='k'): ####revise
+        #    t='k'
+        if (t=='A' or t=='B') and (pt=='x' or pt=='y' or pt=='a'):
+            t='a'
+        elif (t=='k' or t=='a') and (pt=='x' or pt=='a' or pt=='y'):
+            t='a'      
+        elif (t=='i' or t=='k') and (pt=='x'  or pt=='k' or pt=='y'):
+            t='k'      
+        elif (t=='i') and pt=='B':
+            t='i'
+        elif (t=='A' or t=='B') and pt=='i':
+            self.printError('incompatible parameter type of parameter '+value)
+        elif (t=='a' or t=='k') and pt=='i':
+            self.printError('incompatible parameter type of parameter '+value)
+        else:
+            t=''
+        return t
+    
     def adaptParameterType(self,value,t,pt):
+        if t=='boolean' or t=='string':
+            t='i'
         if t==pt:
             return
-        if type(value)==list:
-            #for v in value:
-            #    self.adaptParameterType(v,t,pt)
+        t=self.compareTypes(t,pt)
+        if t!='':
             return
-        elif type(value).__name__=='tuple':
-            self.adaptParameterType(value[0],value[1],pt)
-        elif value in self.SPECIAL:
-            return
-        else:
+            
+        elif False:
             r,s=self.searchFunctionSignature(value)
+            self.printError('incompatible parameter type of parameter xxx'+value+r+s+'t'+t+'pt'+pt)
             if(r!='' or s!=''):
                 return
-            if (t=='A' or t=='B') and (pt=='x' or pt=='k'): ####revise
+            if (t=='A' or t=='B') and (pt=='x' or pt=='y' or pt=='k'): ####revise
                  t='k'
                  self.insertSymbol(value,t,'')
-            elif (t=='A' or t=='B') and (pt=='x' or pt=='a'):
+            elif (t=='A' or t=='B') and (pt=='x' or pt=='y' or pt=='a'):
                  t='a'
                  self.insertSymbol(value,t,'')
             elif (t=='A' or t=='B') and pt=='i':
@@ -2207,8 +2236,7 @@ class Interpreter:
             return '"' + value + '"', t
         elif t=='-':
             v,t=self.readValueOrchestra()
-            #return '-' + v,t
-            return ['-1', '*', v],t
+            return ['-' , v],t
         elif t=='(':
             value,t=self.readExpression()
             v,ty=self.nextToken()
@@ -2218,14 +2246,20 @@ class Interpreter:
                 self.printError(') expected')
         elif t=='identifier':
             vah,tah=self.nextToken()
+            if vah==':':  #type of function function:type
+                type,t=self.nextToken()
+                vah,tah=self.nextToken()
+            else:
+                type=''
             if vah=='(': ## call to function
                 r,s=self.searchFunctionSignature(value)
                 if r=='':
-                    if value=='ftgen':
-                        r='i'
-                    else:
-                        self.printError('unknown function '+value)
-                res=[value,'('] 
+                    self.printError('unknown function '+value)
+                self.insertSymbol(value,'','function')
+                if type!='':
+                    res=[value,':',type,'(']
+                else:
+                    res=[value,'('] 
                 ty=self.peekNextChar()
                 if ty==')': #probe for ')'
                     v,ty=self.nextToken()
@@ -2234,18 +2268,16 @@ class Interpreter:
                 else:
                     value,t1=self.readExpression()
                 i=0                 ###limpiar esto
-                if res[0]!='ftgen':
-                    self.adaptParameterType(value,t1,s[i])
+                self.adaptParameterType(value,t1,s[i])
                 res.append(value)
                 v,ty=self.nextToken()
                 i=1
                 while ty!=')':
                     res.append(',')
                     value,t=self.readExpression()
-                    if res[0]!='ftgen':
-                        if i>=len(s):
-                            self.printError('too much parameters in the function ' + value)
-                        self.adaptParameterType(value,t,s[i])
+                    if i>=len(s):
+                        self.printError('too much parameters in the function ' + value)
+                    self.adaptParameterType(value,t,s[i])
                     res.append(value)
                     v,ty=self.nextToken()
                     if i<len(s)-1:
@@ -2257,6 +2289,7 @@ class Interpreter:
             elif vah=='[': # array
                 val,tv=self.readExpression()
                 self.expectToken([']'])
+                t,v=self.getSymbol(value)
                 return [value,'[',val,']'],t
             elif vah=='=': # Short condition
                 self.expectToken(['='])
@@ -2800,25 +2833,7 @@ class Interpreter:
                         varValue[1][int(index)]=[t,right_value]
                     self.insertSymbol(var,tv,varValue)
                 else:                    #variable
-                    if t=='ftgen':
-                        #don't call getListValue to get the values
-                        #because we have to process the strings
-                        var=instr[2][1]
-                        v1=right_value[0][1]
-                        r=['ftgen','(']
-                        for i in range(len(v1)):
-                            v,t=self.getValue(v1[i])
-                            if t=='string':
-                                r.append( ' "' + v+ '"')
-                            else:
-                                r.append(str(v))
-                            r.append(',')
-                        r[-1]=')'
-                        #self.song.insertScoreFunction(r) ####orchestra
-                        self.song.insertGlobalFunction([['gi'+var,'=',r]])
-                        self.insertSymbol(var,'gi','')
-                    else:
-                        self.insertSymbol(instr[2][1],t,right_value)
+                    self.insertSymbol(instr[2][1],t,right_value)
             elif instr[1] in ['+=','-=','*=','/=','^=']:
                 op=instr[1][0]
                 self.execInstructions([[instr[0],'=',instr[2],[op,instr[2],instr[3]]]])
@@ -3212,11 +3227,11 @@ class Interpreter:
                 self.cleanSymbolTable('local')
 
         self.env='general'
-        for line in self.song.orchestra.globalSection + self.song.orchestra.globalFunctions :
+        for line in self.song.orchestra.globalSection:
             r=''
             if line=='':
                 continue
-            if self.oldStyle(line[2][0]): # old style
+            if len(line)>2 and self.oldStyle(line[2][0]): # old style
                 line[-2]=' '         # delete the = sign and the parenthesis
                 line[-1][1]=' '
                 line[-1][-1]=' '
@@ -3232,6 +3247,7 @@ class Interpreter:
                 token,t=self.nextToken()
             if token=='orchestra':
                 self.state=self.ORCHESTRA
+                self.env='general'
                 g=self.readOrchestra()
                 self.song.insertGlobal(g)
             elif token=='score':
@@ -3266,10 +3282,13 @@ class Interpreter:
             ['ampdbfs',['y','y']],
             ['cent',['y','y']],
             ['cpspch',['y','y']],
+            ['exp',['y','y']],
             ['expon',['B','iii']],
+            ['ftlen',['i','i']],
+            ['frac',['y','y']],
             ['int',['y','y']],
             ['init',['y','y']],
-            ['ftlen',['i','i']],
+            ['log',['y','y']],
             ['max',['y','y'*100]],
             ['min',['y','y'*100]],
             ['octave',['y','y']],
@@ -3290,16 +3309,24 @@ class Interpreter:
             ['butterlp',['a','aki']],
             ['buzz',['a','xxkii']],
             ['comb',['a','akiii']],
+            ['compress',['a','aakkkkkki']],
             ['cpsmidi',['i','']],
             ['cpsmidinn',['i','K']],
+            ['crossfm',['aa','xxxxkiiii']],
+            ['crossfmi',['aa','xxxxkiiii']],
+            ['crosspm',['aa','xxxxkiiii']],
+            ['crosspmi',['aa','xxxxkiiii']],
+            ['crossfmpm',['aa','xxxxkiiii']],
+            ['crossfmpmi',['aa','xxxxkiiii']],
             ['dcblock',['a','ai']],
             ['dcblock2',['a','aii']],
-            ['diskin2',['a','ikiiiiii']],
+            ['diskin2',['aa','ikiiiiii']],
             ['distort',['a','akiii']],
             ['downsamp',['k','ai']],
             ['envlpx',['a','Xiiiiiii']], 
             ['expseg',['B','iii']], 
             ['expsegr',['B','iii']], 
+            ['fillarray',['k','iiiiiiiii']],
             ['fmb3',['a','kkkkkkiiiii']],
             ['fmbell',['a','kkkkkkiiiiii']],
             ['fmmetal',['a','kkkkkkiiiii']],
@@ -3309,12 +3336,15 @@ class Interpreter:
             ['fmwurlie',['a','kkkkkkiiiii']],
             ['foscil',['a','xkxxkii']], 
             ['foscili',['a','xkxxkii']],
+            ['ftgen',['i','iiiiiiiiiiiiiiiiiiiiiiiiiiiiii']],
             ['grain',['a','xxxkkkiiii']], 
             ['grain3',['a','kkkkkkikikkii']],
             ['hsboscil',['a','kkkiiiii']],
             ['ihold',['x','']],
             ['lfo',['B','kki']],
+            ['limit',['y','yKK']],
             ['line',['B','iii']],
+            ['linen',['B','xiii']],
             ['linseg',['B','iiii']],
             ['linrand',['x','k']],
             ['loscil',['a','xkiiiiiiii']],
@@ -3334,13 +3364,17 @@ class Interpreter:
             ['noteondur',['_','iiii']],
             ['noteondur2',['_','iiii']],
             ['nreverb',['a','akkiiiii']],
+            ['ntrpol',['y','yxKii']],
+            ['oscbnk',['a','kkkkiikkkkikkkkkkikiiiiiii']], 
             ['oscil',['A','xxii']], 
             ['oscil3',['A','xxii']], 
             ['oscili',['A','xxii']], 
+            ['oscilikt',['A','xxkii']], 
             ['oscils',['a','iiii']], 
             ['out',['_','a']],
             ['outs',['_','aa']],
-            ['pan2',['a','axi']], 
+            ['pan2',['aa','axi']], 
+            ['pareq',['a','akkkii']], 
             ['phasor',['B','xxi']], 
             ['phasorbnk',['B','ykii']], 
             ['pluck',['a','kkiiiii']], 
@@ -3357,25 +3391,35 @@ class Interpreter:
             ['rezzy',['a','axxii']],
             ['reverb',['a','aki']],
             ['scantable',['a','kkiiii']],
+            #['scanu',['a','iiiiiiikkkkiikkaii']],
+            #['scans',['a','kkiii']],
             ['seed',['_','i']],
+            ['spat3di',['aaaa','aiiiiiii']],
             ['sum',['a','aaaa']],
             ['STKBowed',['a','iikkkkkkkkkk']],
             ['table',['y','yiiii']],
             ['tablei',['y','yiiii']],
+            ['tableikt',['B','xkiii']],
             ['tableiw',['_','iiiiii']],
             ['tablew',['_','xxiiii']],
             ['table3',['y','yiiii']],
+            ['tabmorphak',['a','akkkiiiiiiiiii']],
             ['tival',['i','']],
             ['turnoff',['_','']],
             ['wgpluck',['a','iikiiia']],
             ['wgpluck2',['a','ikikk']],
             ['vco',['a','xxikiiiiii']], 
             ['vco2',['a','kkikki']],
+            ['vco2ft',['k','kii']],
             ['vco2init',['i','iiiiii']],
             ['vdelay',['a','aaii']],
+            ['vdelayx',['a','aaiii']],
             ['vibr',['k','kki']],
             ['vibrato',['k','kkkkkkkkii']],
+            ['waveset',['a','aki']],
             ['wgbow',['a','kkkkkkii']],
+            ['wguide1',['a','axkk']],
+            ['wguide2',['a','axxkkkk']],
             ['wterrain',['a','kkkkkkii']],
             ['xadsr',['B','iiiiii']],
             ['zacl',['_','kk']],
