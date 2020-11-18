@@ -105,25 +105,25 @@ ftgen(7, 0, 1024,   8, -.8, 42, -.78,  400, -.7, 140, .7,  400, .78, 42, .8)
     Synth:
       
       <<silence(30)
-      <<|30,16,/note g5_________ a b____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note d5_________ b a____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note g5_________ a d____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note a5_________ g a____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note g5_________ g a____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note g5_________ b a____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note d5_________ a b____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note g5_________ d a____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note a5_________ a g____/| +  'tabl1':[random.randint(1,6)]
-      <<|30,16,/note g5_________ a g____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g6_________ a b____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note d_________ b a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g_________ a d____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note a_________ g a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g_________ g a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g_________ b a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note d_________ a b____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g_________ d a____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note a7_________ a g____/| +  'tabl1':[random.randint(1,6)]
+      <<|30,16,/note g_________ a g____/| +  'tabl1':[random.randint(1,6)]
 
         t=getTime()
 
-        var(0,t,'rez',1,100)
-        var(t/2,t,'amp',0.1,0.01)
-        var(0,t,'fqc',50,100)
+        var(0,t,'rez',10, 100)
+        var(t/2,t,'amp',0.07,0.01)
+        var(0,t,'fqc',10,100)
 
         put(0,'pan',[0.4])
-        put(0,'amp',[0.06])
+        put(0,'amp',[0.07])
         put(t/2,'pan',[0,1,0,1,0.6])
 
 #end
