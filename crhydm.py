@@ -913,7 +913,7 @@ class Interpreter:
     def insertSymbol(self,key,typ,value):
         #v=self.symbolTable['general'].get(key)
         #if v==None:
-            self.symbolTable[self.env][key]=[typ, value]
+        self.symbolTable[self.env][key]=[typ, value]
         #else:
         #    self.symbolTable['general'][key]=[typ, value]
 
@@ -1515,6 +1515,7 @@ class Interpreter:
         
     def readInstrumentLine(self,name):
         token,t=self.nextToken()
+
         if token=='#':
             self.printError("endinstrument expected")
         if token=='endinstrument':
@@ -1578,7 +1579,11 @@ class Interpreter:
                 if var!=',':
                     t1,v=self.getSymbol(var)
                     if t1=='':
-                        self.insertSymbol(var,t[0],'')
+                        if t[0]=='p': #in case we are assigning a parameter to a new variable
+                            t1='i'
+                        else:
+                            t1=t[0]
+                        self.insertSymbol(var,t1,'')
                         t=t[1:] #in case of a function returning several values
                         r.append(var)
                     elif t1=='p': #redefinition of parameter
@@ -1672,7 +1677,7 @@ class Interpreter:
         inputs=[]
         outputs=[]
         p,t1=self.nextToken()
-        if p=='=':
+        if p=='=':  #redefine instrument
             n,t=self.nextToken()
             t,v=self.getSymbol(n) 
             i=copy.deepcopy(v[1])
@@ -1726,19 +1731,20 @@ class Interpreter:
                 n=par.index(p)
                 line=['p' + str(n+4) , '=', 'cpspch' , '(', 'p' + str(n+4)  ,')']
                 instr.append(line)
-                par[n]='__deleted_parameter'
+                #par[n]='__deleted_parameter'
         for p in glissPar:
             self.insertSymbol(p + '_next','i','p'+str(i))
             n=par.index(p)
             self.insertSymbol(p,'k','') #from now on the meaning of this parameter is redefined below
             parameters.append(p + '_next')
-            par[n]='__deleted_parameter'
+            #par[n]='__deleted_parameter'
             if p in pitchPar:
                 line=[p , '=', 'line' , '(', 'cpspch' , '(','p' + str(n+4) ,')', ',', 'abs(p3)', ',' ,'cpspch' , '(', 'p' + str(i) ,')',')']
             else:
                 line=[p , '=', 'line' , '(', 'p' + str(n+4) , ',', 'abs(p3)', ',' , 'p' + str(i) ,')']
             instr.append(line)
             i=i+1
+
         line=self.readInstrumentLine(name)
         while line!=0:
             if len(line)>0:
@@ -1810,6 +1816,11 @@ class Interpreter:
 
     
     def coerce(self,t1,t2):
+        if t1=='p':
+            t1='i'
+        if t2=='p':
+            t2='i'
+
         if t1=='x':
             return 'x'
         if t2=='x':
@@ -1991,6 +2002,8 @@ class Interpreter:
         elif (t1=='pattern' or t1=='listVar') and  t2=='listVar':
             v2[1].insert(0,-1)
             return self.sumValues(v1,t1,v2,t2)
+        elif t1=='listVar' and t2=='number':
+            return self.sumValues(v1,t1,v2 * -1,t2)
         self.printError('types '+t1+' and '+t2+" can't be substracted")
 
     def orValues(self,v1,t1,v2,t2):
@@ -2188,9 +2201,9 @@ class Interpreter:
         elif (t=='i') and pt=='B':
             t='i'
         elif (t=='A' or t=='B') and pt=='i':
-            self.printError('incompatible parameter type of parameter '+value)
+            self.printError('incompatible parameter type of parameter')
         elif (t=='a' or t=='k') and pt=='i':
-            self.printError('incompatible parameter type of parameter '+value)
+            self.printError('incompatible parameter type of parameter')
         else:
             t=''
         return t
@@ -2304,9 +2317,9 @@ class Interpreter:
                 t1,v=self.getSymbol(value)
                 if t1=='':
                     self.printError('unknown variable '+value)
-                elif t1=='p': #parameter
-                    value=v
-                    t1='i'
+                #elif t1=='p': #parameter #esperamos a printSymbol para ver el valor del parametro
+                #    value=v
+                #    t1='i'
                 return value,t1
         else:        
            return value,'x'
@@ -2425,9 +2438,21 @@ class Interpreter:
                 else:
                     break
                 i+=1
-            
+           
+
             if octave=='':
                 octave=self.octave
+
+            while ch in ['^','v']: # ^=octave up  v=octave down
+                if ch=='^':
+                    octave=str(int(octave)+1)
+                else:
+                    octave=str(int(octave)-1)
+                i+=1    
+                if i<len(value):
+                    ch=value[i]
+                else:
+                    break
 
             while ch=='+':
                 inc+=1
@@ -3337,6 +3362,7 @@ class Interpreter:
             ['foscil',['a','xkxxkii']], 
             ['foscili',['a','xkxxkii']],
             ['ftgen',['i','iiiiiiiiiiiiiiiiiiiiiiiiiiiiii']],
+            ['ftgenonce',['i','iiiiiiiiiiiiiiiiiiiiiiiiiiiiii']],
             ['grain',['a','xxxkkkiiii']], 
             ['grain3',['a','kkkkkkikikkii']],
             ['hsboscil',['a','kkkiiiii']],
@@ -3397,6 +3423,7 @@ class Interpreter:
             ['spat3di',['aaaa','aiiiiiii']],
             ['sum',['a','aaaa']],
             ['STKBowed',['a','iikkkkkkkkkk']],
+            ['syncphasor',['aa','xai']],
             ['table',['y','yiiii']],
             ['tablei',['y','yiiii']],
             ['tableikt',['B','xkiii']],
